@@ -27,6 +27,7 @@ struct avro_record_field_t {
 	int index;
 	char *name;
 	avro_schema_t type;
+	int32_t field_id;
 	/*
 	 * TODO: default values 
 	 */
@@ -51,11 +52,15 @@ struct avro_enum_schema_t {
 struct avro_array_schema_t {
 	struct avro_obj_t obj;
 	avro_schema_t items;
+	int32_t element_id;
+	char *logical_type;
 };
 
 struct avro_map_schema_t {
 	struct avro_obj_t obj;
 	avro_schema_t values;
+	int32_t key_id;
+	int32_t value_id;
 };
 
 struct avro_union_schema_t {

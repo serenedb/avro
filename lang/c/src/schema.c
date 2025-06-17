@@ -74,7 +74,7 @@ static int is_avro_id(const char *name)
  * namespace (as a newly allocated buffer using Avro's allocator). */
 static char *split_namespace_name(const char *fullname, const char **name_out)
 {
-	char *last_dot = strrchr(fullname, '.');
+	const char *last_dot = strrchr(fullname, '.');
 	if (last_dot == NULL) {
 		*name_out = fullname;
 		return NULL;
@@ -183,6 +183,9 @@ static void avro_schema_free(avro_schema_t schema)
 				struct avro_array_schema_t *array;
 				array = avro_schema_to_array(schema);
 				avro_schema_decref(array->items);
+				if (array->logical_type) {
+					avro_str_free((char *) array->logical_type);
+				}
 				avro_freet(struct avro_array_schema_t, array);
 			}
 			break;
@@ -444,7 +447,7 @@ avro_schema_t avro_schema_union_branch_by_name
 	return avro_schema_union_branch(unionp, val.branch_index);
 }
 
-avro_schema_t avro_schema_array(const avro_schema_t items)
+avro_schema_t avro_schema_array(const avro_schema_t items, int32_t element_id, const char *logical_type)
 {
 	struct avro_array_schema_t *array =
 	    (struct avro_array_schema_t *) avro_new(struct avro_array_schema_t);
@@ -453,6 +456,11 @@ avro_schema_t avro_schema_array(const avro_schema_t items)
 		return NULL;
 	}
 	array->items = avro_schema_incref(items);
+	array->logical_type = NULL;
+	if (logical_type) {
+		array->logical_type = avro_strdup(logical_type);
+	}
+	array->element_id = element_id;
 	avro_schema_init(&array->obj, AVRO_ARRAY);
 	return &array->obj;
 }
@@ -462,7 +470,21 @@ avro_schema_t avro_schema_array_items(avro_schema_t array)
 	return avro_schema_to_array(array)->items;
 }
 
-avro_schema_t avro_schema_map(const avro_schema_t values)
+int32_t avro_schema_array_element_id(avro_schema_t array)
+{
+	return avro_schema_to_array(array)->element_id;
+}
+
+int avro_schema_array_is_map(avro_schema_t array)
+{
+	const char *logical_type = avro_schema_to_array(array)->logical_type;
+	if (!logical_type) {
+		return 0;
+	}
+	return strcmp(logical_type, "map") == 0;
+}
+
+avro_schema_t avro_schema_map(const avro_schema_t values, int32_t key_id, int32_t value_id)
 {
 	struct avro_map_schema_t *map =
 	    (struct avro_map_schema_t *) avro_new(struct avro_map_schema_t);
@@ -471,6 +493,8 @@ avro_schema_t avro_schema_map(const avro_schema_t values)
 		return NULL;
 	}
 	map->values = avro_schema_incref(values);
+	map->key_id = key_id;
+	map->value_id = value_id;
 	avro_schema_init(&map->obj, AVRO_MAP);
 	return &map->obj;
 }
@@ -478,6 +502,16 @@ avro_schema_t avro_schema_map(const avro_schema_t values)
 avro_schema_t avro_schema_map_values(avro_schema_t map)
 {
 	return avro_schema_to_map(map)->values;
+}
+
+int32_t avro_schema_map_key_id(avro_schema_t map)
+{
+	return avro_schema_to_map(map)->key_id;
+}
+
+int32_t avro_schema_map_value_id(avro_schema_t map)
+{
+	return avro_schema_to_map(map)->value_id;
 }
 
 avro_schema_t avro_schema_enum(const char *name)
@@ -594,7 +628,8 @@ avro_schema_enum_number_of_symbols(const avro_schema_t enum_schema)
 int
 avro_schema_record_field_append(const avro_schema_t record_schema,
 				const char *field_name,
-				const avro_schema_t field_schema)
+				const avro_schema_t field_schema,
+				int32_t field_id)
 {
 	check_param(EINVAL, is_avro_schema(record_schema), "record schema");
 	check_param(EINVAL, is_avro_record(record_schema), "record schema");
@@ -620,6 +655,7 @@ avro_schema_record_field_append(const avro_schema_t record_schema,
 	new_field->index = record->fields->num_entries;
 	new_field->name = avro_strdup(field_name);
 	new_field->type = avro_schema_incref(field_schema);
+	new_field->field_id = field_id;
 	st_insert(record->fields, record->fields->num_entries,
 		  (st_data_t) new_field);
 	st_insert(record->fields_byname, (st_data_t) new_field->name,
@@ -693,6 +729,16 @@ avro_schema_t avro_schema_record_field_get(const avro_schema_t
 	st_lookup(avro_schema_to_record(record)->fields_byname,
 		  (st_data_t) field_name, &val.data);
 	return val.field->type;
+}
+
+int32_t avro_schema_record_field_id(const avro_schema_t schema, int index)
+{
+	union {
+		st_data_t data;
+		struct avro_record_field_t *field;
+	} val;
+	st_lookup(avro_schema_to_record(schema)->fields, index, &val.data);
+	return val.field->field_id;
 }
 
 int avro_schema_record_field_get_index(const avro_schema_t schema,
@@ -771,12 +817,12 @@ avro_schema_t avro_schema_link_target(avro_schema_t schema)
 }
 
 static const char *
-qualify_name(const char *name, const char *namespace)
+qualify_name(const char *name, const char *namespaceX)
 {
 	char *full_name;
-	if (namespace != NULL && strchr(name, '.') == NULL) {
-		full_name = avro_str_alloc(strlen(name) + strlen(namespace) + 2);
-		sprintf(full_name, "%s.%s", namespace, name);
+	if (namespaceX != NULL && strchr(name, '.') == NULL) {
+		full_name = avro_str_alloc(strlen(name) + strlen(namespaceX) + 2);
+		sprintf(full_name, "%s.%s", namespaceX, name);
 	} else {
 		full_name = avro_strdup(name);
 	}
@@ -787,20 +833,20 @@ static int
 save_named_schemas(const avro_schema_t schema, st_table *st)
 {
 	const char *name = avro_schema_name(schema);
-	const char *namespace = avro_schema_namespace(schema);
-	const char *full_name = qualify_name(name, namespace);
+	const char *namespaceX = avro_schema_namespace(schema);
+	const char *full_name = qualify_name(name, namespaceX);
 	int rval = st_insert(st, (st_data_t) full_name, (st_data_t) schema);
 	return rval;
 }
 
 static avro_schema_t
-find_named_schemas(const char *name, const char *namespace, st_table *st)
+find_named_schemas(const char *name, const char *namespaceX, st_table *st)
 {
 	union {
 		avro_schema_t schema;
 		st_data_t data;
 	} val;
-	const char *full_name = qualify_name(name, namespace);
+	const char *full_name = qualify_name(name, namespaceX);
 	int rval = st_lookup(st, (st_data_t) full_name, &(val.data));
 	avro_str_free((char *)full_name);
 	if (rval) {
@@ -813,7 +859,7 @@ find_named_schemas(const char *name, const char *namespace, st_table *st)
 static int
 avro_type_from_json_t(json_t *json, avro_type_t *type,
 		      st_table *named_schemas, avro_schema_t *named_type,
-		      const char *namespace)
+		      const char *namespaceX)
 {
 	json_t *json_type;
 	const char *type_str;
@@ -864,11 +910,20 @@ avro_type_from_json_t(json_t *json, avro_type_t *type,
 		*type = AVRO_MAP;
 	} else if (strcmp(type_str, "fixed") == 0) {
 		*type = AVRO_FIXED;
-	} else if ((*named_type = find_named_schemas(type_str, namespace, named_schemas))) {
+	} else if ((*named_type = find_named_schemas(type_str, namespaceX, named_schemas))) {
 		*type = AVRO_LINK;
 	} else {
 		avro_set_error("Unknown Avro \"type\": %s", type_str);
 		return EINVAL;
+	}
+	return 0;
+}
+
+static int
+field_id_from_json_t(json_t *json, int32_t *field_id)
+{
+	if (json != NULL && json_is_integer(json)) {
+		*field_id = json_integer_value(json);
 	}
 	return 0;
 }
@@ -947,15 +1002,15 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			}
 
 			if (strchr(fullname, '.')) {
-				char *namespace = split_namespace_name(fullname, &name);
-				*schema = avro_schema_record(name, namespace);
-				avro_str_free(namespace);
+				char *namespaceX = split_namespace_name(fullname, &name);
+				*schema = avro_schema_record(name, namespaceX);
+				avro_str_free(namespaceX);
 			} else if (json_is_string(json_namespace)) {
-				const char *namespace = json_string_value(json_namespace);
-				if (strlen(namespace) == 0) {
-					namespace = NULL;
+				const char *namespaceX = json_string_value(json_namespace);
+				if (strlen(namespaceX) == 0) {
+					namespaceX = NULL;
 				}
-				*schema = avro_schema_record(fullname, namespace);
+				*schema = avro_schema_record(fullname, namespaceX);
 			} else {
 				*schema = avro_schema_record(fullname, parent_namespace);
 			}
@@ -972,7 +1027,9 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 				    json_array_get(json_fields, i);
 				json_t *json_field_name;
 				json_t *json_field_type;
+				json_t *json_field_field_id;
 				avro_schema_t json_field_type_schema;
+				int32_t field_id = INT32_MAX;
 				int field_rval;
 
 				if (!json_is_object(json_field)) {
@@ -994,6 +1051,8 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 					avro_schema_decref(*schema);
 					return EINVAL;
 				}
+				json_field_field_id =
+				    json_object_get(json_field, "field-id");
 				field_rval =
 				    avro_schema_from_json_t(json_field_type,
 							    &json_field_type_schema,
@@ -1004,10 +1063,17 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 					return field_rval;
 				}
 				field_rval =
+					field_id_from_json_t(json_field_field_id, &field_id);
+				if (field_rval) {
+					avro_schema_decref(*schema);
+					return field_rval;
+				}
+				field_rval =
 				    avro_schema_record_field_append(*schema,
 								    json_string_value
 								    (json_field_name),
-								    json_field_type_schema);
+								    json_field_type_schema,
+								    field_id);
 				avro_schema_decref(json_field_type_schema);
 				if (field_rval != 0) {
 					avro_schema_decref(*schema);
@@ -1046,16 +1112,16 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			}
 
 			if (strchr(fullname, '.')) {
-				char *namespace;
-				namespace = split_namespace_name(fullname, &name);
-				*schema = avro_schema_enum_ns(name, namespace);
-				avro_str_free(namespace);
+				char *namespaceX;
+				namespaceX = split_namespace_name(fullname, &name);
+				*schema = avro_schema_enum_ns(name, namespaceX);
+				avro_str_free(namespaceX);
 			} else if (json_is_string(json_namespace)) {
-				const char *namespace = json_string_value(json_namespace);
-				if (strlen(namespace) == 0) {
-					namespace = NULL;
+				const char *namespaceX = json_string_value(json_namespace);
+				if (strlen(namespaceX) == 0) {
+					namespaceX = NULL;
 				}
-				*schema = avro_schema_enum_ns(fullname, namespace);
+				*schema = avro_schema_enum_ns(fullname, namespaceX);
 			} else {
 				*schema = avro_schema_enum_ns(fullname, parent_namespace);
 			}
@@ -1093,7 +1159,11 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 		{
 			int items_rval;
 			json_t *json_items = json_object_get(json, "items");
+			json_t *json_element_id = json_object_get(json, "element-id");
+			json_t *json_logical_type = json_object_get(json, "logicalType");
 			avro_schema_t items_schema;
+			const char *logical_type = NULL;
+			int32_t element_id = INT32_MAX;
 			if (!json_items) {
 				avro_set_error("Array type must have \"items\"");
 				return EINVAL;
@@ -1104,7 +1174,15 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			if (items_rval) {
 				return items_rval;
 			}
-			*schema = avro_schema_array(items_schema);
+			if (json_logical_type) {
+				logical_type = json_string_value(json_logical_type);
+			}
+			items_rval =
+			    field_id_from_json_t(json_element_id, &element_id);
+			if (items_rval) {
+				return items_rval;
+			}
+			*schema = avro_schema_array(items_schema, element_id, logical_type);
 			avro_schema_decref(items_schema);
 		}
 		break;
@@ -1113,7 +1191,11 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 		{
 			int values_rval;
 			json_t *json_values = json_object_get(json, "values");
+			json_t *json_key_id = json_object_get(json, "key-id");
+			json_t *json_value_id = json_object_get(json, "value-id");
 			avro_schema_t values_schema;
+			int32_t key_id = INT32_MAX;
+			int32_t value_id = INT32_MAX;
 
 			if (!json_values) {
 				avro_set_error("Map type must have \"values\"");
@@ -1125,7 +1207,15 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			if (values_rval) {
 				return values_rval;
 			}
-			*schema = avro_schema_map(values_schema);
+			values_rval = field_id_from_json_t(json_key_id, &key_id);
+			if (values_rval) {
+				return values_rval;
+			}
+			values_rval = field_id_from_json_t(json_value_id, &value_id);
+			if (values_rval) {
+				return values_rval;
+			}
+			*schema = avro_schema_map(values_schema, key_id, value_id);
 			avro_schema_decref(values_schema);
 		}
 		break;
@@ -1183,16 +1273,16 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			fullname = json_string_value(json_name);
 
 			if (strchr(fullname, '.')) {
-				char *namespace;
-				namespace = split_namespace_name(fullname, &name);
-				*schema = avro_schema_fixed_ns(name, namespace, (int64_t) size);
-				avro_str_free(namespace);
+				char *namespaceX;
+				namespaceX = split_namespace_name(fullname, &name);
+				*schema = avro_schema_fixed_ns(name, namespaceX, (int64_t) size);
+				avro_str_free(namespaceX);
 			} else if (json_is_string(json_namespace)) {
-				const char *namespace = json_string_value(json_namespace);
-				if (strlen(namespace) == 0) {
-					namespace = NULL;
+				const char *namespaceX = json_string_value(json_namespace);
+				if (strlen(namespaceX) == 0) {
+					namespaceX = NULL;
 				}
-				*schema = avro_schema_fixed_ns(fullname, namespace, (int64_t) size);
+				*schema = avro_schema_fixed_ns(fullname, namespaceX, (int64_t) size);
 			} else {
 				*schema = avro_schema_fixed_ns(fullname, parent_namespace, (int64_t) size);
 			}
@@ -1328,7 +1418,8 @@ avro_schema_t avro_schema_copy_root(avro_schema_t schema, st_table *named_schema
 				    avro_schema_copy_root(val.field->type, named_schemas);
 				avro_schema_record_field_append(new_schema,
 								val.field->name,
-								type_copy);
+								type_copy,
+								val.field->field_id);
 				avro_schema_decref(type_copy);
 			}
 		}
@@ -1380,7 +1471,7 @@ avro_schema_t avro_schema_copy_root(avro_schema_t schema, st_table *named_schema
 			if (!values_copy) {
 				return NULL;
 			}
-			new_schema = avro_schema_map(values_copy);
+			new_schema = avro_schema_map(values_copy, map_schema->key_id, map_schema->value_id);
 			avro_schema_decref(values_copy);
 		}
 		break;
@@ -1394,7 +1485,7 @@ avro_schema_t avro_schema_copy_root(avro_schema_t schema, st_table *named_schema
 			if (!items_copy) {
 				return NULL;
 			}
-			new_schema = avro_schema_array(items_copy);
+			new_schema = avro_schema_array(items_copy, array_schema->element_id, array_schema->logical_type);
 			avro_schema_decref(items_copy);
 		}
 		break;
@@ -1676,6 +1767,16 @@ static int avro_write_str(avro_writer_t out, const char *str)
 {
 	return avro_write(out, (char *)str, strlen(str));
 }
+static int avro_write_int(avro_writer_t out, int32_t integer)
+{
+	char buffer[11];
+	
+	int ret = snprintf(buffer, 11, "%d", integer);
+	if (ret < 0) {
+		return 1;
+	}
+	return avro_write(out, buffer, ret);
+}
 
 static int write_field(avro_writer_t out, const struct avro_record_field_t *field,
 		       const char *parent_namespace)
@@ -1685,6 +1786,10 @@ static int write_field(avro_writer_t out, const struct avro_record_field_t *fiel
 	check(rval, avro_write_str(out, field->name));
 	check(rval, avro_write_str(out, "\",\"type\":"));
 	check(rval, avro_schema_to_json2(field->type, out, parent_namespace));
+	if (field->field_id != INT32_MAX) {
+		check(rval, avro_write_str(out, ",\"field-id\":"));
+		check(rval, avro_write_int(out, field->field_id));
+	}
 	return avro_write_str(out, "}");
 }
 
@@ -1777,7 +1882,16 @@ static int write_map(avro_writer_t out, const struct avro_map_schema_t *map,
 		     const char *parent_namespace)
 {
 	int rval;
-	check(rval, avro_write_str(out, "{\"type\":\"map\",\"values\":"));
+	check(rval, avro_write_str(out, "{\"type\":\"map\""));
+	if (map->key_id != INT32_MAX) {
+		check(rval, avro_write_str(out, ",\"key-id\":"));
+		check(rval, avro_write_int(out, map->key_id));
+	}
+	if (map->value_id != INT32_MAX) {
+		check(rval, avro_write_str(out, ",\"value-id\":"));
+		check(rval, avro_write_int(out, map->value_id));
+	}
+	check(rval, avro_write_str(out, ",\"values\":"));
 	check(rval, avro_schema_to_json2(map->values, out, parent_namespace));
 	return avro_write_str(out, "}");
 }
@@ -1785,7 +1899,17 @@ static int write_array(avro_writer_t out, const struct avro_array_schema_t *arra
 		       const char *parent_namespace)
 {
 	int rval;
-	check(rval, avro_write_str(out, "{\"type\":\"array\",\"items\":"));
+	check(rval, avro_write_str(out, "{\"type\":\"array\""));
+	if (array->element_id != INT32_MAX) {
+		check(rval, avro_write_str(out, ",\"element-id\":"));
+		check(rval, avro_write_int(out, array->element_id));
+	}
+	if (array->logical_type) {
+		check(rval, avro_write_str(out, ",\"logicalType\": \""));
+		check(rval, avro_write_str(out, array->logical_type));
+		check(rval, avro_write_str(out, "\""));
+	}
+	check(rval, avro_write_str(out, ",\"items\":"));
 	check(rval, avro_schema_to_json2(array->items, out, parent_namespace));
 	return avro_write_str(out, "}");
 }
@@ -1814,9 +1938,9 @@ static int write_link(avro_writer_t out, const struct avro_link_schema_t *link,
 {
 	int rval;
 	check(rval, avro_write_str(out, "\""));
-	const char *namespace = avro_schema_namespace(link->to);
-	if (namespace && nullstrcmp(namespace, parent_namespace)) {
-		check(rval, avro_write_str(out, namespace));
+	const char *namespaceX = avro_schema_namespace(link->to);
+	if (namespaceX && nullstrcmp(namespaceX, parent_namespace)) {
+		check(rval, avro_write_str(out, namespaceX));
 		check(rval, avro_write_str(out, "."));
 	}
 	check(rval, avro_write_str(out, avro_schema_name(link->to)));

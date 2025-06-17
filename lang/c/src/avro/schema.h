@@ -43,6 +43,7 @@ avro_schema_t avro_schema_null(void);
 avro_schema_t avro_schema_record(const char *name, const char *space);
 avro_schema_t avro_schema_record_field_get(const avro_schema_t
 					   record, const char *field_name);
+int32_t avro_schema_record_field_id(const avro_schema_t record, int index);
 const char *avro_schema_record_field_name(const avro_schema_t schema, int index);
 int avro_schema_record_field_get_index(const avro_schema_t schema,
 				       const char *field_name);
@@ -50,7 +51,8 @@ avro_schema_t avro_schema_record_field_get_by_index
 (const avro_schema_t record, int index);
 int avro_schema_record_field_append(const avro_schema_t record,
 				    const char *field_name,
-				    const avro_schema_t type);
+				    const avro_schema_t type,
+				    int32_t field_id);
 size_t avro_schema_record_size(const avro_schema_t record);
 
 avro_schema_t avro_schema_enum(const char *name);
@@ -68,11 +70,15 @@ avro_schema_t avro_schema_fixed_ns(const char *name, const char *space,
 				   const int64_t len);
 int64_t avro_schema_fixed_size(const avro_schema_t fixed);
 
-avro_schema_t avro_schema_map(const avro_schema_t values);
+avro_schema_t avro_schema_map(const avro_schema_t values, int32_t key_id, int32_t value_id);
 avro_schema_t avro_schema_map_values(avro_schema_t map);
+int32_t avro_schema_map_key_id(avro_schema_t map);
+int32_t avro_schema_map_value_id(avro_schema_t map);
 
-avro_schema_t avro_schema_array(const avro_schema_t items);
+avro_schema_t avro_schema_array(const avro_schema_t items, int32_t element_id, const char *logical_type);
 avro_schema_t avro_schema_array_items(avro_schema_t array);
+int32_t avro_schema_array_element_id(avro_schema_t array);
+int avro_schema_array_is_map(avro_schema_t array);
 
 avro_schema_t avro_schema_union(void);
 size_t avro_schema_union_size(const avro_schema_t union_schema);
