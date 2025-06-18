@@ -2004,7 +2004,10 @@ avro_schema_to_json2(const avro_schema_t schema, avro_writer_t out,
 		return EINVAL;
 	}
 
-	if (is_avro_primitive(schema) && !is_avro_null(schema)) {
+	if (is_avro_null(schema)) {
+		return 0;
+	}
+	if (is_avro_primitive(schema)) {
 		return avro_write_str(out, "\"}");
 	}
 	avro_set_error("Unknown schema type");
