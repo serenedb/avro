@@ -282,7 +282,7 @@ avro_schema_t avro_schema_int(void)
 
 avro_schema_t avro_schema_long(void)
 {
-	static struct avro_int64_schema_t obj = { {AVRO_INT64, AVRO_SCHEMA, 1}, NULL, 0 };
+	static struct avro_int64_schema_t obj = { {AVRO_INT64, AVRO_SCHEMA, 1}, NULL, -1 };
 	return avro_schema_incref(&obj.obj);
 }
 
@@ -386,8 +386,8 @@ avro_schema_t avro_schema_fixed_ns(const char *name, const char *space,
 	}
 	fixed->size = size;
 	fixed->logical_type = NULL;
-	fixed->precision = 0;
-	fixed->scale = 0;
+	fixed->precision = -1;
+	fixed->scale = -1;
 	avro_schema_init(&fixed->obj, AVRO_FIXED);
 	return &fixed->obj;
 }
@@ -1066,7 +1066,7 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			json_t *json_lt  = json_object_get(json, "logicalType");
 			json_t *json_utc = json_object_get(json, "adjust-to-utc");
 			const char *lt = json_lt ? json_string_value(json_lt) : NULL;
-			int adjust_to_utc = (json_utc && json_is_true(json_utc)) ? 1 : 0;
+			int adjust_to_utc = json_utc ? (json_is_true(json_utc) ? 1 : 0) : -1;
 			*schema = lt
 			    ? avro_schema_long_with_logical_type(lt, adjust_to_utc)
 			    : avro_schema_long();
@@ -1375,8 +1375,8 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			json_t *json_precision = json_object_get(json, "precision");
 			json_t *json_scale     = json_object_get(json, "scale");
 			const char *lt = json_lt ? json_string_value(json_lt) : NULL;
-			int32_t precision = json_precision ? (int32_t) json_integer_value(json_precision) : 0;
-			int32_t scale     = json_scale     ? (int32_t) json_integer_value(json_scale)     : 0;
+			int32_t precision = json_precision ? (int32_t) json_integer_value(json_precision) : -1;
+			int32_t scale     = json_scale     ? (int32_t) json_integer_value(json_scale)     : -1;
 			json_int_t size;
 			const char *fullname, *name;
 			if (!json_is_integer(json_size)) {
@@ -2015,13 +2015,13 @@ static int write_fixed(avro_writer_t out, const struct avro_fixed_schema_t *fixe
 		check(rval, avro_write_str(out, fixed->logical_type));
 		check(rval, avro_write_str(out, "\""));
 	}
-	if (fixed->precision > 0) {
+	if (fixed->precision != -1) {
 		char num[16];
 		check(rval, avro_write_str(out, ",\"precision\":"));
 		snprintf(num, sizeof(num), "%" PRId32, fixed->precision);
 		check(rval, avro_write_str(out, num));
 	}
-	if (fixed->scale > 0) {
+	if (fixed->scale != -1) {
 		char num[16];
 		check(rval, avro_write_str(out, ",\"scale\":"));
 		snprintf(num, sizeof(num), "%" PRId32, fixed->scale);
@@ -2170,8 +2170,10 @@ avro_schema_to_json2(const avro_schema_t schema, avro_writer_t out,
 		}
 		if (is_avro_int64(schema)) {
 			struct avro_int64_schema_t *s = avro_schema_to_int64(schema);
-			if (s->adjust_to_utc) {
-				check(rval, avro_write_str(out, ",\"adjust-to-utc\":true"));
+			if (s->adjust_to_utc != -1) {
+				check(rval, avro_write_str(out, s->adjust_to_utc
+				    ? ",\"adjust-to-utc\":true"
+				    : ",\"adjust-to-utc\":false"));
 			}
 		}
 		return avro_write_str(out, "}");
