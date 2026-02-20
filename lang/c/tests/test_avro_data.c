@@ -353,8 +353,8 @@ static int test_null(void)
 static int test_record(void)
 {
 	avro_schema_t schema = avro_schema_record("person", NULL);
-	avro_schema_record_field_append(schema, "name", avro_schema_string());
-	avro_schema_record_field_append(schema, "age", avro_schema_int());
+	avro_schema_record_field_append(schema, "name", avro_schema_string(), 0);
+	avro_schema_record_field_append(schema, "age", avro_schema_int(), 0);
 
 	avro_datum_t datum = avro_record(schema);
 	avro_datum_t name_datum, age_datum;
@@ -484,7 +484,7 @@ static int test_enum(void)
 static int test_array(void)
 {
 	int i, rval;
-	avro_schema_t schema = avro_schema_array(avro_schema_int());
+	avro_schema_t schema = avro_schema_array(avro_schema_int(), 0, NULL);
 	avro_datum_t datum = avro_array(schema);
 
 	for (i = 0; i < 10; i++) {
@@ -510,7 +510,7 @@ static int test_array(void)
 
 static int test_map(void)
 {
-	avro_schema_t schema = avro_schema_map(avro_schema_long());
+	avro_schema_t schema = avro_schema_map(avro_schema_long(), 0, 0);
 	avro_datum_t datum = avro_map(schema);
 	int64_t i = 0;
 	char *nums[] =

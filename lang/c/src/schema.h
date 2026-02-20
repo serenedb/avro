@@ -69,11 +69,25 @@ struct avro_union_schema_t {
 	st_table *branches_byname;
 };
 
+struct avro_int32_schema_t {
+	struct avro_obj_t obj;
+	char *logical_type;
+};
+
+struct avro_int64_schema_t {
+	struct avro_obj_t obj;
+	char *logical_type;
+	int adjust_to_utc;
+};
+
 struct avro_fixed_schema_t {
 	struct avro_obj_t obj;
 	const char *name;
 	const char *space;
 	int64_t size;
+	char *logical_type;
+	int32_t precision;
+	int32_t scale;
 };
 
 struct avro_link_schema_t {
@@ -88,5 +102,7 @@ struct avro_link_schema_t {
 #define avro_schema_to_union(schema_)   (container_of(schema_, struct avro_union_schema_t, obj))
 #define avro_schema_to_fixed(schema_)   (container_of(schema_, struct avro_fixed_schema_t, obj))
 #define avro_schema_to_link(schema_)    (container_of(schema_, struct avro_link_schema_t, obj))
+#define avro_schema_to_int32(schema_)   (container_of(schema_, struct avro_int32_schema_t, obj))
+#define avro_schema_to_int64(schema_)   (container_of(schema_, struct avro_int64_schema_t, obj))
 
 #endif

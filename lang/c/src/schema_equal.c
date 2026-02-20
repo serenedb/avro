@@ -99,7 +99,7 @@ schema_fixed_equal(struct avro_fixed_schema_t *a, struct avro_fixed_schema_t *b)
 {
 	if (strcmp(a->name, b->name)) {
 		/*
-		 * They have different names 
+		 * They have different names
 		 */
 		return 0;
 	}
@@ -199,6 +199,12 @@ int avro_schema_equal(avro_schema_t a, avro_schema_t b)
 	} else if (is_avro_link(a)) {
 		return schema_link_equal(avro_schema_to_link(a),
 					 avro_schema_to_link(b));
+	} else if (is_avro_int32(a)) {
+		return nullstrcmp(avro_schema_to_int32(a)->logical_type,
+				  avro_schema_to_int32(b)->logical_type) == 0;
+	} else if (is_avro_int64(a)) {
+		return nullstrcmp(avro_schema_to_int64(a)->logical_type,
+				  avro_schema_to_int64(b)->logical_type) == 0;
 	}
 	return 1;
 }

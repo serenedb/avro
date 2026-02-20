@@ -837,7 +837,7 @@ static int
 test_array(void)
 {
 	avro_schema_t  double_schema = avro_schema_double();
-	avro_schema_t  array_schema = avro_schema_array(double_schema);
+	avro_schema_t  array_schema = avro_schema_array(double_schema, 0, NULL);
 
 	avro_value_iface_t  *array_class =
 	    avro_generic_class_from_schema(array_schema);
@@ -1054,7 +1054,7 @@ static int
 test_map(void)
 {
 	avro_schema_t  double_schema = avro_schema_double();
-	avro_schema_t  map_schema = avro_schema_map(double_schema);
+	avro_schema_t  map_schema = avro_schema_map(double_schema, 0, 0);
 
 	avro_value_iface_t  *map_class =
 	    avro_generic_class_from_schema(map_schema);

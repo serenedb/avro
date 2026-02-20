@@ -80,6 +80,11 @@ avro_schema_t avro_schema_array_items(avro_schema_t array);
 int32_t avro_schema_array_element_id(avro_schema_t array);
 int avro_schema_array_is_map(avro_schema_t array);
 
+const char *avro_schema_logical_type(avro_schema_t schema);
+int avro_schema_adjust_to_utc(avro_schema_t schema);
+int32_t avro_schema_precision(avro_schema_t schema);
+int32_t avro_schema_scale(avro_schema_t schema);
+
 avro_schema_t avro_schema_union(void);
 size_t avro_schema_union_size(const avro_schema_t union_schema);
 int avro_schema_union_append(const avro_schema_t
