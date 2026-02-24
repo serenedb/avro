@@ -187,16 +187,15 @@ set(CODEC_LIBRARIES ${ZLIB_LIBRARIES} ${LZMA_LIBRARIES} ${SNAPPY_LIBRARIES})
 set(CODEC_PKG "${ZLIB_PKG} ${LZMA_PKG} ${SNAPPY_PKG}")
 
 # Jansson JSON library
-find_path(JANSSON_INCLUDE_DIR jansson.h)
-find_library(JANSSON_LIB NAMES jansson)
-if (JANSSON_INCLUDE_DIR AND JANSSON_LIB)
+find_package(jansson CONFIG REQUIRED)
+if (jansson_FOUND)
     set(JANSSON_PKG libjansson)
-    set(JANSSON_LIBRARIES ${JANSSON_LIB})
-    include_directories(${JANSSON_INCLUDE_DIR})
-    message("Found jansson: ${JANSSON_LIB}")
-else ()
+    set(JANSSON_LIBRARIES jansson::jansson)
+    include_directories(${JANSSON_INCLUDE_DIRS})
+    link_directories(${JANSSON_LIBRARY_DIRS})
+else (jansson_FOUND)
     message(FATAL_ERROR "libjansson >=2.3 not found")
-endif ()
+endif (jansson_FOUND)
 
 
 add_subdirectory(src)
