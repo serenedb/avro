@@ -131,6 +131,15 @@ int avro_reader_memory_is_depleted(avro_reader_t reader);
 avro_schema_t
 avro_file_reader_get_writer_schema(avro_file_reader_t reader);
 
+/**
+ * Get a metadata value by key from an Avro data file.
+ *
+ * @param reader The file reader
+ * @param key The metadata key to retrieve (e.g., "avro.schema", "avro.codec")
+ * @return The metadata value as a string, or NULL if not found
+ */
+const char* avro_file_reader_get_metadata(avro_file_reader_t reader, const char *key);
+
 int avro_file_writer_sync(avro_file_writer_t writer);
 int avro_file_writer_flush(avro_file_writer_t writer);
 int avro_file_writer_close(avro_file_writer_t writer);

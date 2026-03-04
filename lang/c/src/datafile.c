@@ -40,6 +40,8 @@ struct avro_file_reader_t_ {
 	int64_t blocks_total;
 	int64_t current_blocklen;
 	char * current_blockdata;
+	avro_value_iface_t *meta_iface;
+	avro_value_t meta;
 };
 
 struct avro_file_writer_t_ {
@@ -337,7 +339,8 @@ int avro_file_writer_create_from_writers(avro_writer_t writer_in, avro_writer_t 
 
 static int file_read_header(avro_reader_t reader,
 			    avro_schema_t * writers_schema, avro_codec_t codec,
-			    char *sync, int synclen)
+			    char *sync, int synclen,
+			    avro_value_iface_t **meta_iface_out, avro_value_t *meta_out)
 {
 	int rval;
 	avro_schema_t meta_schema;
@@ -417,8 +420,8 @@ static int file_read_header(avro_reader_t reader,
 		return rval;
 	}
 
-	avro_value_decref(&meta);
-	avro_value_iface_decref(meta_iface);
+	*meta_iface_out = meta_iface;
+	*meta_out = meta;
 	return avro_read(reader, sync, synclen);
 }
 
@@ -743,6 +746,34 @@ avro_file_reader_get_writer_schema(avro_file_reader_t r)
 	return avro_schema_incref(r->writers_schema);
 }
 
+const char* avro_file_reader_get_metadata(avro_file_reader_t reader, const char *key)
+{
+	if (!reader || !key) {
+		return NULL;
+	}
+
+	avro_value_t meta_val;
+	int rval;
+
+	rval = avro_value_get_by_name(&reader->meta, key, &meta_val, NULL);
+	if (rval) {
+		return NULL;
+	}
+
+	if (avro_value_get_type(&meta_val) != AVRO_BYTES) {
+		return NULL;
+	}
+
+	const void *buf;
+	size_t size;
+
+	if (avro_value_get_bytes(&meta_val, &buf, &size) != 0) {
+		return NULL;
+	}
+
+	return (const char *)buf;
+}
+
 static int file_write_block(avro_file_writer_t w)
 {
 	const avro_encoding_t *enc = &avro_binary_encoding;
@@ -944,6 +975,8 @@ int avro_file_reader_close(avro_file_reader_t reader)
 	if (reader->current_blockdata) {
 		avro_free(reader->current_blockdata, reader->current_blocklen);
 	}
+	avro_value_decref(&reader->meta);
+	avro_value_iface_decref(reader->meta_iface);
 	avro_freet(struct avro_file_reader_t_, reader);
 	return 0;
 }
