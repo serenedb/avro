@@ -779,6 +779,57 @@ const char* avro_file_reader_get_metadata(avro_file_reader_t reader, const char 
 	return (const char *)buf;
 }
 
+int avro_file_reader_get_metadata_count(avro_file_reader_t reader, size_t *count)
+{
+	if (!reader || !count) {
+		return EINVAL;
+	}
+
+	return avro_value_get_size(&reader->meta, count);
+}
+
+int avro_file_reader_get_metadata_by_index(avro_file_reader_t reader, size_t index, const char **key, const char **value, size_t *value_size)
+{
+	if (!reader) {
+		return EINVAL;
+	}
+
+	avro_value_t meta_entry;
+	const char *entry_key;
+	int rval;
+
+	rval = avro_value_get_by_index(&reader->meta, index, &meta_entry, &entry_key);
+	if (rval) {
+		return rval;
+	}
+
+	if (key) {
+		*key = entry_key;
+	}
+
+	if (value || value_size) {
+		if (avro_value_get_type(&meta_entry) != AVRO_BYTES) {
+			return EINVAL;
+		}
+
+		const void *buf;
+		size_t size;
+
+		rval = avro_value_get_bytes(&meta_entry, &buf, &size);
+		if (rval) {
+			return rval;
+		}
+
+		if (value) {
+			*value = (const char *)buf;
+		}
+		if (value_size) {
+			*value_size = size;
+		}
+	}
+	return 0;
+}
+
 static int file_write_block(avro_file_writer_t w)
 {
 	const avro_encoding_t *enc = &avro_binary_encoding;

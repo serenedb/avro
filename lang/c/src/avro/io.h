@@ -140,6 +140,28 @@ avro_file_reader_get_writer_schema(avro_file_reader_t reader);
  */
 const char* avro_file_reader_get_metadata(avro_file_reader_t reader, const char *key);
 
+/**
+ * Get the number of metadata entries in an Avro data file.
+ *
+ * @param reader The file reader
+ * @param count Pointer to receive the count
+ * @return 0 on success, error code on failure
+ */
+int avro_file_reader_get_metadata_count(avro_file_reader_t reader, size_t *count);
+
+/**
+ * Get a metadata entry by index from an Avro data file.
+ *
+ * @param reader The file reader
+ * @param index The index of the metadata entry (0 to count-1)
+ * @param key Pointer to receive the key (can be NULL)
+ * @param value Pointer to receive the value bytes (can be NULL)
+ * @param value_size Pointer to receive the value size (can be NULL)
+ * @return 0 on success, error code on failure
+ */
+int avro_file_reader_get_metadata_by_index(avro_file_reader_t reader, size_t index,
+                                            const char **key, const char **value, size_t *value_size);
+
 int avro_file_writer_sync(avro_file_writer_t writer);
 int avro_file_writer_flush(avro_file_writer_t writer);
 int avro_file_writer_close(avro_file_writer_t writer);
