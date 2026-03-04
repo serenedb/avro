@@ -424,7 +424,7 @@ static int file_read_header(avro_reader_t reader,
 		*meta_iface_out = meta_iface;
 		*meta_out = meta;
 	} else {
-		avro_value_decref(meta);
+		avro_value_decref(&meta);
 		avro_value_iface_decref(meta_iface);
 	}
 	return avro_read(reader, sync, synclen);
