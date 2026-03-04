@@ -455,7 +455,7 @@ file_writer_open(const char *path, avro_file_writer_t w, size_t block_size)
 	}
 	rval =
 	    file_read_header(reader, &w->writers_schema, w->codec, w->sync,
-			     sizeof(w->sync, NULL, NULL));
+			     sizeof(w->sync), NULL, NULL);
 
 	avro_reader_free(reader);
 	if (rval) {
