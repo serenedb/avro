@@ -420,8 +420,13 @@ static int file_read_header(avro_reader_t reader,
 		return rval;
 	}
 
-	*meta_iface_out = meta_iface;
-	*meta_out = meta;
+	if (meta_iface_out && meta_out) {
+		*meta_iface_out = meta_iface;
+		*meta_out = meta;
+	} else {
+		avro_value_decref(meta);
+		avro_value_iface_decref(meta_iface);
+	}
 	return avro_read(reader, sync, synclen);
 }
 
@@ -450,7 +455,7 @@ file_writer_open(const char *path, avro_file_writer_t w, size_t block_size)
 	}
 	rval =
 	    file_read_header(reader, &w->writers_schema, w->codec, w->sync,
-			     sizeof(w->sync));
+			     sizeof(w->sync, NULL, NULL));
 
 	avro_reader_free(reader);
 	if (rval) {
@@ -629,7 +634,7 @@ int avro_file_reader_fp(FILE *fp, const char *path, int should_close,
 	avro_codec(r->codec, NULL);
 
 	rval = file_read_header(r->reader, &r->writers_schema, r->codec,
-				r->sync, sizeof(r->sync));
+				r->sync, sizeof(r->sync), &r->meta_iface, &r->meta);
 	if (rval) {
 		avro_reader_free(r->reader);
 		avro_codec_reset(r->codec);
@@ -695,7 +700,7 @@ int avro_reader_reader(avro_reader_t reader_in,	avro_file_reader_t * reader)
 	avro_codec(r->codec, NULL);
 
 	rval = file_read_header(r->reader, &r->writers_schema, r->codec,
-				r->sync, sizeof(r->sync));
+				r->sync, sizeof(r->sync), &r->meta_iface, &r->meta);
 	if (rval) {
 		avro_reader_free(r->reader);
 		avro_codec_reset(r->codec);
