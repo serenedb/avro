@@ -20,7 +20,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef _WIN32
-#include <unistd.h>
+#include <io.h>
 #endif
 
 #include "avro.h"

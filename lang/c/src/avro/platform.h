@@ -35,8 +35,10 @@ extern "C" {
 // Defines for printing size_t.
 #if defined(_WIN64)
   #define PRIsz PRIu64
+  typedef __int64  ssize_t;
 #elif defined(_WIN32)
   #define PRIsz PRIu32
+  typedef long   ssize_t;
 #else // GCC
   #define PRIsz "zu"
 #endif

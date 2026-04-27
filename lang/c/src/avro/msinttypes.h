@@ -54,6 +54,10 @@
 
 // 7.8 Format conversion of integer types
 
+#if (_MSC_VER >= 1900)
+#   include <inttypes.h>
+#else
+    
 typedef struct {
    intmax_t quot;
    intmax_t rem;
@@ -311,5 +315,6 @@ imaxdiv_t __cdecl imaxdiv(intmax_t numer, intmax_t denom)
 #define wcstoimax _wcstoi64
 #define wcstoumax _wcstoui64
 
+#endif // (_MSC_VER >= 1900)
 
 #endif // _MSC_INTTYPES_H_ ]
