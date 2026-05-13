@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #ifdef _WIN32
-#define snprintf _snprintf
+// #define snprintf _snprintf
 #endif
 
 /* Note that AVRO_PLATFORM_IS_BIG_ENDIAN is *always* defined. It is

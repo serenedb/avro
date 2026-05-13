@@ -275,7 +275,7 @@ static int encode_deflate(avro_codec_t c, void * data, int64_t len)
 	s->next_in = (Bytef*)data;
 	s->avail_in = (uInt)len;
 
-	s->next_out = c->block_data;
+	s->next_out = (Bytef*)c->block_data;
 	s->avail_out = (uInt)c->block_size;
 
 	s->total_out = 0;
@@ -319,10 +319,10 @@ static int decode_deflate(avro_codec_t c, void * data, int64_t len)
 
 	c->used_size = 0;
 
-	s->next_in = data;
+	s->next_in = (Bytef*)data;
 	s->avail_in = len;
 
-	s->next_out = c->block_data;
+	s->next_out = (Bytef*)c->block_data;
 	s->avail_out = c->block_size;
 
 	s->total_out = 0;
@@ -343,7 +343,7 @@ static int decode_deflate(avro_codec_t c, void * data, int64_t len)
 		if (err == Z_BUF_ERROR)
 		{
 			c->block_data = avro_realloc(c->block_data, c->block_size, c->block_size * 2);
-			s->next_out = c->block_data + s->total_out;
+			s->next_out = (Bytef*)c->block_data + s->total_out;
 			s->avail_out += c->block_size;
 			c->block_size = c->block_size * 2;
 		}
@@ -446,7 +446,7 @@ static int encode_lzma(avro_codec_t codec, void * data, int64_t len)
 		return 1;
 	}
 
-	ret = lzma_raw_buffer_encode(filters, NULL, data, len, codec->block_data, &written, codec->block_size);
+	ret = lzma_raw_buffer_encode(filters, NULL, (const uint8_t*)data, len, (uint8_t*)codec->block_data, &written, codec->block_size);
 
 	codec->used_size = written;
 
@@ -477,8 +477,8 @@ static int decode_lzma(avro_codec_t codec, void * data, int64_t len)
 
 	do
 	{
-		ret = lzma_raw_buffer_decode(filters, NULL, data,
-			&read_pos, len, codec->block_data, &write_pos,
+		ret = lzma_raw_buffer_decode(filters, NULL, (const uint8_t*)data,
+			&read_pos, len, (uint8_t*)codec->block_data, &write_pos,
 			codec->block_size);
 
 		codec->used_size = write_pos;

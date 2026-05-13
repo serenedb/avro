@@ -137,51 +137,35 @@ include_directories(${AvroC_SOURCE_DIR}/src)
 
 # Enable codecs
 
-find_package(ZLIB)
 if (ZLIB_FOUND)
     set(ZLIB_PKG zlib)
+    set(ZLIB_LIBRARIES zlib)
     add_definitions(-DDEFLATE_CODEC)
     include_directories(${ZLIB_INCLUDE_DIRS})
     message("Enabled deflate codec")
 else (ZLIB_FOUND)
     set(ZLIB_PKG "")
     set(ZLIB_LIBRARIES "")
-    message("Disabled deflate codec. zlib not found.")
+    message(FATAL_ERROR "Disabled deflate codec. zlib not found.")
 endif (ZLIB_FOUND)
 
-find_package(Snappy)
 if (SNAPPY_FOUND AND ZLIB_FOUND)  # Snappy borrows crc32 from zlib
     set(SNAPPY_PKG snappy)
+    set(SNAPPY_LIBRARIES snappy)
     add_definitions(-DSNAPPY_CODEC)
     include_directories(${SNAPPY_INCLUDE_DIRS})
     message("Enabled snappy codec")
 else (SNAPPY_FOUND AND ZLIB_FOUND)
     set(SNAPPY_PKG "")
     set(SNAPPY_LIBRARIES "")
-    message("Disabled snappy codec. libsnappy not found or zlib not found.")
+    message(FATAL_ERROR "Disabled snappy codec. libsnappy not found or zlib not found.")
 endif (SNAPPY_FOUND AND ZLIB_FOUND)
-
-find_package(PkgConfig)
-pkg_check_modules(LZMA liblzma)
-if (LZMA_FOUND)
-    set(LZMA_PKG liblzma)
-    add_definitions(-DLZMA_CODEC)
-    include_directories(${LZMA_INCLUDE_DIRS})
-    link_directories(${LZMA_LIBRARY_DIRS})
-    message("Enabled lzma codec")
-else (LZMA_FOUND)
-    set(LZMA_PKG "")
-    set(LZMA_LIBRARIES "")
-    message("Disabled lzma codec. liblzma not found.")
-endif (LZMA_FOUND)
 
 set(CODEC_LIBRARIES ${ZLIB_LIBRARIES} ${LZMA_LIBRARIES} ${SNAPPY_LIBRARIES})
 set(CODEC_PKG "${ZLIB_PKG} ${LZMA_PKG} ${SNAPPY_PKG}")
 
-# Jansson JSON library
-pkg_check_modules(JANSSON jansson>=2.7)
 if (JANSSON_FOUND)
-    set(JANSSON_PKG libjansson)
+    set(JANSSON_PKG jansson)
     include_directories(${JANSSON_INCLUDE_DIRS})
     link_directories(${JANSSON_LIBRARY_DIRS})
 else (JANSSON_FOUND)
@@ -190,9 +174,3 @@ endif (JANSSON_FOUND)
 
 
 add_subdirectory(src)
-add_subdirectory(examples)
-add_subdirectory(tests)
-add_subdirectory(docs)
-
-add_custom_target(pretty
-    "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake_pretty.cmake")
