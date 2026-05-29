@@ -40,6 +40,7 @@ struct avro_error_data_t {
     char  *AVRO_OTHER_ERROR;
 };
 
+#define THREADSAFE
 
 #if defined THREADSAFE 
 #if ( defined __unix__ || defined __unix )
