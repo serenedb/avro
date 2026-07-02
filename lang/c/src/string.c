@@ -24,6 +24,8 @@
 #include "avro/allocation.h"
 #include "avro/errors.h"
 
+#undef DEBUG
+
 #ifndef AVRO_STRING_DEBUG
 #define AVRO_STRING_DEBUG 0
 #endif

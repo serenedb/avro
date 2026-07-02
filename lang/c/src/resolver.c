@@ -28,6 +28,7 @@
 #include "avro_private.h"
 #include "st.h"
 
+#undef DEBUG
 
 #if !defined(DEBUG_RESOLVER)
 #define DEBUG_RESOLVER 0

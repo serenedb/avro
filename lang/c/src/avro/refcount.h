@@ -86,7 +86,10 @@ avro_refcount_dec(volatile int *refcount)
  * Mac OS X
  */
 
-#elif __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 1050
+#elif __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 1050 \
+  && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101200
+
+/* macOS 10.12 deprecates OSAtomic* so we'll use the GCC/Clang branch below */
 
 #include <libkern/OSAtomic.h>
 
@@ -124,24 +127,19 @@ avro_refcount_dec(volatile int *refcount)
 static inline void
 avro_refcount_set(volatile int *refcount, int value)
 {
-	*refcount = value;
+	__atomic_store_n(refcount, value, __ATOMIC_RELEASE);
 }
 
 static inline void
 avro_refcount_inc(volatile int *refcount)
 {
-	if (*refcount != (int) -1) {
-		__sync_add_and_fetch(refcount, 1);
-	}
+	__atomic_fetch_add(refcount, 1, __ATOMIC_RELAXED);
 }
 
 static inline int
 avro_refcount_dec(volatile int *refcount)
 {
-	if (*refcount != (int) -1) {
-		return (__sync_sub_and_fetch(refcount, 1) == 0);
-	}
-	return 0;
+	return __atomic_sub_fetch(refcount, 1, __ATOMIC_ACQ_REL) == 0;
 }
 
 
