@@ -30,6 +30,8 @@
 #include "avro/value.h"
 #include "st.h"
 
+#undef DEBUG
+
 #ifndef AVRO_RESOLVER_DEBUG
 #define AVRO_RESOLVER_DEBUG 0
 #endif
