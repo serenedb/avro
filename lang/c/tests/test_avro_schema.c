@@ -132,7 +132,7 @@ static void run_tests(char *dirpath, int should_pass)
 
 static int test_array(void)
 {
-	avro_schema_t schema = avro_schema_array(avro_schema_int());
+	avro_schema_t schema = avro_schema_array(avro_schema_int(), 0, NULL);
 
 	if (!avro_schema_equal
 	    (avro_schema_array_items(schema), avro_schema_int())) {
@@ -195,7 +195,7 @@ static int test_fixed(void)
 
 static int test_map(void)
 {
-	avro_schema_t schema = avro_schema_map(avro_schema_long());
+	avro_schema_t schema = avro_schema_map(avro_schema_long(), 0, 0);
 
 	if (!avro_schema_equal
 	    (avro_schema_map_values(schema), avro_schema_long())) {
@@ -211,8 +211,8 @@ static int test_record(void)
 {
 	avro_schema_t schema = avro_schema_record("person", NULL);
 
-	avro_schema_record_field_append(schema, "name", avro_schema_string());
-	avro_schema_record_field_append(schema, "age", avro_schema_int());
+	avro_schema_record_field_append(schema, "name", avro_schema_string(), 0);
+	avro_schema_record_field_append(schema, "age", avro_schema_int(), 0);
 
 	if (avro_schema_record_field_get_index(schema, "name") != 0) {
 		fprintf(stderr, "Incorrect index for \"name\" field\n");
