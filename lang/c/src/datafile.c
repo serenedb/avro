@@ -515,6 +515,9 @@ static int file_read_block_count(avro_file_reader_t r)
 
 	/* For a correctly formatted file, EOF will occur here */
 	rval = enc->read_long(r->reader, &r->blocks_total);
+	if (rval == EOF) {
+		return rval;
+	}
 
 	if (rval == EILSEQ && avro_reader_is_eof(r->reader)) {
 		return EOF;
