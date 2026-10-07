@@ -95,9 +95,13 @@ static int write_header(avro_file_writer_t w, const char *metadata_json)
 
 	if (metadata_json) {
 		metadata_obj = json_loads(metadata_json, 0, &error);
-		if (!metadata_obj || !json_is_object(metadata_obj)) {
+		if (!metadata_obj) {
 			// handle error: invalid JSON or not an object
-			EINVAL;
+			return EINVAL;
+		}
+		if (!json_is_object(metadata_obj)) {
+			json_decref(metadata_obj);
+			return EINVAL;
 		}
 		meta_count = json_object_size(metadata_obj);
 	}
@@ -116,21 +120,33 @@ static int write_header(avro_file_writer_t w, const char *metadata_json)
 	}
 	schema_len = avro_writer_tell(schema_writer);
 	avro_writer_free(schema_writer);
-	check(rval, enc->write_bytes(w->writer, w->schema_buf, schema_len));
+	rval = enc->write_bytes(w->writer, w->schema_buf, schema_len);
+	if (rval) {
+		json_decref(metadata_obj);
+		return rval;
+	}
 
 	if (metadata_obj) {
 		const char *key;
 		json_t *value;
 
 		json_object_foreach(metadata_obj, key, value) {
-			check(rval, enc->write_string(w->writer, key));
+			rval = enc->write_string(w->writer, key);
+			if (rval) {
+				json_decref(metadata_obj);
+				return rval;
+			}
 			if (!json_is_string(value)) {
 				json_decref(metadata_obj);
 				return EINVAL;
 			}
 
 			const char *val_str = json_string_value(value);
-			check(rval, enc->write_bytes(w->writer, val_str, strlen(val_str)));
+			rval = enc->write_bytes(w->writer, val_str, strlen(val_str));
+			if (rval) {
+				json_decref(metadata_obj);
+				return rval;
+			}
 		}
 		json_decref(metadata_obj);
 	}
