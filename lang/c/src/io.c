@@ -157,6 +157,15 @@ avro_reader_memory_set_source(avro_reader_t reader, const char *buf, int64_t len
 	}
 }
 
+int avro_reader_memory_is_depleted(avro_reader_t reader)
+{
+	if (!is_memory_io(reader)) {
+		return 0;
+	}
+	struct _avro_reader_memory_t *mem_reader = avro_reader_to_memory(reader);
+	return mem_reader->read == mem_reader->len;
+}
+
 avro_writer_t avro_writer_memory(const char *buf, int64_t len)
 {
 	struct _avro_writer_memory_t *mem_writer =
@@ -180,6 +189,17 @@ avro_writer_memory_set_dest(avro_writer_t writer, const char *buf, int64_t len)
 		mem_writer->buf = buf;
 		mem_writer->len = len;
 		mem_writer->written = 0;
+	}
+}
+
+void
+avro_writer_memory_set_dest_with_offset(avro_writer_t writer, const char *buf, int64_t len, int64_t offset)
+{
+	if (is_memory_io(writer)) {
+		struct _avro_writer_memory_t *mem_writer = avro_writer_to_memory(writer);
+		mem_writer->buf = buf;
+		mem_writer->len = len;
+		mem_writer->written = offset;
 	}
 }
 
@@ -388,6 +408,14 @@ int64_t avro_writer_tell(avro_writer_t writer)
 	return EINVAL;
 }
 
+const char *avro_writer_buf(avro_writer_t writer)
+{
+	if (is_memory_io(writer)) {
+		return avro_writer_to_memory(writer)->buf;
+	}
+	return NULL;
+}
+
 void avro_writer_flush(avro_writer_t writer)
 {
 	if (is_file_io(writer)) {
@@ -444,4 +472,8 @@ int avro_reader_is_eof(avro_reader_t reader)
 		}
 	}
 	return 0;
+}
+
+int avro_reader_is_memory(avro_reader_t reader) {
+	return is_memory_io(reader);
 }

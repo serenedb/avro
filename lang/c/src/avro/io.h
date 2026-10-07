@@ -52,6 +52,10 @@ avro_reader_memory_set_source(avro_reader_t reader, const char *buf, int64_t len
 void
 avro_writer_memory_set_dest(avro_writer_t writer, const char *buf, int64_t len);
 
+void
+avro_writer_memory_set_dest_with_offset(avro_writer_t writer, const char *buf, int64_t len, int64_t offset);
+
+
 int avro_read(avro_reader_t reader, void *buf, int64_t len);
 int avro_skip(avro_reader_t reader, int64_t len);
 int avro_write(avro_writer_t writer, void *buf, int64_t len);
@@ -60,6 +64,8 @@ void avro_reader_reset(avro_reader_t reader);
 
 void avro_writer_reset(avro_writer_t writer);
 int64_t avro_writer_tell(avro_writer_t writer);
+const char *avro_writer_buf(avro_writer_t writer);
+
 void avro_writer_flush(avro_writer_t writer);
 
 void avro_writer_dump(avro_writer_t writer, FILE * fp);
@@ -109,11 +115,17 @@ int avro_file_writer_create_with_codec(const char *path,
 int avro_file_writer_create_with_codec_fp(FILE *fp, const char *path, int should_close,
 				avro_schema_t schema, avro_file_writer_t * writer,
 				const char *codec, size_t block_size);
+int avro_file_writer_create_from_writers(avro_writer_t writer_in, avro_writer_t datum_writer_in, avro_schema_t schema, avro_file_writer_t * writer);
+int avro_file_writer_create_from_writers_with_metadata(avro_writer_t writer_in, avro_writer_t datum_writer_in, avro_schema_t schema, avro_file_writer_t * writer, const char *metadata_json);
 int avro_file_writer_open(const char *path, avro_file_writer_t * writer);
 int avro_file_writer_open_bs(const char *path, avro_file_writer_t * writer, size_t block_size);
 int avro_file_reader(const char *path, avro_file_reader_t * reader);
 int avro_file_reader_fp(FILE *fp, const char *path, int should_close,
 			avro_file_reader_t * reader);
+int avro_reader_reader(avro_reader_t reader_in,
+			avro_file_reader_t * reader);
+int avro_reader_is_memory(avro_reader_t reader);
+int avro_reader_memory_is_depleted(avro_reader_t reader);
 
 avro_schema_t
 avro_file_reader_get_writer_schema(avro_file_reader_t reader);
