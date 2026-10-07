@@ -288,7 +288,7 @@ avro_schema_t avro_schema_long(void)
 
 static avro_schema_t avro_schema_int_with_logical_type(const char *logical_type)
 {
-	struct avro_int32_schema_t *s = avro_new(struct avro_int32_schema_t);
+	struct avro_int32_schema_t *s = (struct avro_int32_schema_t *) avro_new(struct avro_int32_schema_t);
 	if (!s) {
 		avro_set_error("Cannot allocate new int schema");
 		return NULL;
@@ -301,7 +301,7 @@ static avro_schema_t avro_schema_int_with_logical_type(const char *logical_type)
 static avro_schema_t avro_schema_long_with_logical_type(const char *logical_type,
                                                          int adjust_to_utc)
 {
-	struct avro_int64_schema_t *s = avro_new(struct avro_int64_schema_t);
+	struct avro_int64_schema_t *s = (struct avro_int64_schema_t *) avro_new(struct avro_int64_schema_t);
 	if (!s) {
 		avro_set_error("Cannot allocate new long schema");
 		return NULL;
