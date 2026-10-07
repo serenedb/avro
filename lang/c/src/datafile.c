@@ -286,7 +286,7 @@ int avro_file_writer_create_with_codec_fp(FILE *fp, const char *path, int should
 	return 0;
 }
 
-int avro_file_writer_create_from_writers_with_metadata(avro_writer_t writer_in, avro_writer_t datum_writer_in, avro_schema_t schema, avro_file_writer_t * writer, const char *metadata_json) {
+int avro_file_writer_create_from_writers_with_metadata_and_codec(avro_writer_t writer_in, avro_writer_t datum_writer_in, avro_schema_t schema, avro_file_writer_t * writer, const char *metadata_json, const char *codec) {
 	avro_file_writer_t w;
 	int rval;
 	check_param(EINVAL, is_avro_schema(schema), "schema");
@@ -304,7 +304,11 @@ int avro_file_writer_create_from_writers_with_metadata(avro_writer_t writer_in, 
 		avro_freet(struct avro_file_writer_t_, w);
 		return ENOMEM;
 	}
-	rval = avro_codec(w->codec, NULL);
+	/* A NULL codec selects the default ("null"/uncompressed); any avro-c codec
+	 * name (e.g. "deflate", "snappy", "zstandard") is honoured. The block-write
+	 * path (file_write_block) and header writer use w->codec uniformly, so the
+	 * memory-writer flow compresses exactly like the path-based codec writer. */
+	rval = avro_codec(w->codec, codec);
 	if (rval) {
 		avro_codec_reset(w->codec);
 		avro_freet(struct avro_codec_t_, w->codec);
@@ -320,6 +324,10 @@ int avro_file_writer_create_from_writers_with_metadata(avro_writer_t writer_in, 
 
 	w->writers_schema = avro_schema_incref(schema);
 	return write_header(w, metadata_json);
+}
+
+int avro_file_writer_create_from_writers_with_metadata(avro_writer_t writer_in, avro_writer_t datum_writer_in, avro_schema_t schema, avro_file_writer_t * writer, const char *metadata_json) {
+	return avro_file_writer_create_from_writers_with_metadata_and_codec(writer_in, datum_writer_in, schema, writer, metadata_json, NULL);
 }
 
 int avro_file_writer_create_from_writers(avro_writer_t writer_in, avro_writer_t datum_writer_in, avro_schema_t schema, avro_file_writer_t * writer)
