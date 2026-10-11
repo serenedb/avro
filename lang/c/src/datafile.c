@@ -217,6 +217,9 @@ file_writer_create(FILE *fp, const char *path, int should_close, avro_schema_t s
 	w->block_count = 0;
 	rval = file_writer_init_fp(fp, path, should_close, EXCLUSIVE_WRITE_MODE, w);
 	if (rval) {
+		if (fp) {
+			return rval;
+		}
 		check(rval, file_writer_init_fp(fp, path, should_close, "wb", w));
 	}
 
@@ -239,7 +242,14 @@ file_writer_create(FILE *fp, const char *path, int should_close, avro_schema_t s
 	}
 
 	w->writers_schema = avro_schema_incref(schema);
-	return write_header(w, NULL);
+	rval = write_header(w, NULL);
+	if (rval) {
+		avro_schema_decref(w->writers_schema);
+		avro_writer_free(w->datum_writer);
+		avro_free(w->datum_buffer, w->datum_buffer_size);
+		avro_writer_free(w->writer);
+	}
+	return rval;
 }
 
 int
@@ -372,6 +382,7 @@ static int file_read_header(avro_reader_t reader,
 	avro_value_t schema_bytes;
 	const void *p;
 	size_t len;
+	avro_schema_t schema = NULL;
 
 	check(rval, avro_read(reader, magic, sizeof(magic)));
 	if (magic[0] != 'O' || magic[1] != 'b' || magic[2] != 'j'
@@ -383,23 +394,28 @@ static int file_read_header(avro_reader_t reader,
 	meta_values_schema = avro_schema_bytes();
 	meta_schema = avro_schema_map(meta_values_schema, INT32_MAX, INT32_MAX);
 	meta_iface = avro_generic_class_from_schema(meta_schema);
+	avro_schema_decref(meta_schema);
 	if (meta_iface == NULL) {
 		return EILSEQ;
 	}
-	check(rval, avro_generic_value_new(meta_iface, &meta));
+	rval = avro_generic_value_new(meta_iface, &meta);
+	if (rval) {
+		avro_value_iface_decref(meta_iface);
+		return rval;
+	}
 	rval = avro_value_read(reader, &meta);
 	if (rval) {
 		avro_prefix_error("Cannot read file header: ");
-		return EILSEQ;
+		rval = EILSEQ;
+		goto error;
 	}
-	avro_schema_decref(meta_schema);
 
 	rval = avro_value_get_by_name(&meta, "avro.codec", &codec_val, NULL);
 	if (rval) {
 		if (avro_codec(codec, NULL) != 0) {
 			avro_set_error("Codec not specified in header and unable to set 'null' codec");
-			avro_value_decref(&meta);
-			return EILSEQ;
+			rval = EILSEQ;
+			goto error;
 		}
 	} else {
 		const void *buf;
@@ -410,8 +426,8 @@ static int file_read_header(avro_reader_t reader,
 
 		if (type != AVRO_BYTES) {
 			avro_set_error("Value type of codec is unexpected");
-			avro_value_decref(&meta);
-			return EILSEQ;
+			rval = EILSEQ;
+			goto error;
 		}
 
 		avro_value_get_bytes(&codec_val, &buf, &size);
@@ -420,26 +436,31 @@ static int file_read_header(avro_reader_t reader,
 
 		if (avro_codec(codec, codec_name) != 0) {
 			avro_set_error("File header contains an unknown codec");
-			avro_value_decref(&meta);
-			return EILSEQ;
+			rval = EILSEQ;
+			goto error;
 		}
 	}
 
 	rval = avro_value_get_by_name(&meta, "avro.schema", &schema_bytes, NULL);
 	if (rval) {
 		avro_set_error("File header doesn't contain a schema");
-		avro_value_decref(&meta);
-		return EILSEQ;
+		rval = EILSEQ;
+		goto error;
 	}
 
 	avro_value_get_bytes(&schema_bytes, &p, &len);
-	rval = avro_schema_from_json_length((const char *) p, len, writers_schema);
+	rval = avro_schema_from_json_length((const char *) p, len, &schema);
 	if (rval) {
 		avro_prefix_error("Cannot parse file header: ");
-		avro_value_decref(&meta);
-		return rval;
+		goto error;
 	}
 
+	rval = avro_read(reader, sync, synclen);
+	if (rval) {
+		goto error;
+	}
+
+	*writers_schema = schema;
 	if (meta_iface_out && meta_out) {
 		*meta_iface_out = meta_iface;
 		*meta_out = meta;
@@ -447,7 +468,13 @@ static int file_read_header(avro_reader_t reader,
 		avro_value_decref(&meta);
 		avro_value_iface_decref(meta_iface);
 	}
-	return avro_read(reader, sync, synclen);
+	return 0;
+
+error:
+	avro_schema_decref(schema);
+	avro_value_decref(&meta);
+	avro_value_iface_decref(meta_iface);
+	return rval;
 }
 
 static int
@@ -491,6 +518,7 @@ file_writer_open(const char *path, avro_file_writer_t w, size_t block_size)
 	w->writer = avro_writer_file(fp);
 	if (!w->writer) {
 		fclose(fp);
+		avro_schema_decref(w->writers_schema);
 		avro_set_error("Cannot create file writer for %s", path);
 		return ENOMEM;
 	}
@@ -505,6 +533,7 @@ file_writer_open(const char *path, avro_file_writer_t w, size_t block_size)
 	if(!w->datum_buffer) {
 		avro_set_error("Could not allocate datum buffer\n");
 		avro_writer_free(w->writer);
+		avro_schema_decref(w->writers_schema);
 		return ENOMEM;
 	}
 
@@ -514,6 +543,7 @@ file_writer_open(const char *path, avro_file_writer_t w, size_t block_size)
 		avro_set_error("Cannot create datum writer for file %s", path);
 		avro_writer_free(w->writer);
 		avro_free(w->datum_buffer, w->datum_buffer_size);
+		avro_schema_decref(w->writers_schema);
 		return ENOMEM;
 	}
 
@@ -726,6 +756,28 @@ static int file_read_block_count(avro_file_reader_t r)
 	return 0;
 }
 
+static void file_reader_free(avro_file_reader_t r)
+{
+	avro_schema_decref(r->writers_schema);
+	avro_reader_free(r->reader);
+	avro_reader_free(r->block_reader);
+	if (r->codec) {
+		avro_codec_reset(r->codec);
+		avro_freet(struct avro_codec_t_, r->codec);
+	}
+	if (r->current_blockdata) {
+		avro_free(r->current_blockdata, r->current_blocklen);
+	}
+	if (r->blocks) {
+		avro_free(r->blocks, r->block_capacity * sizeof(struct avro_file_block_descriptor_t));
+	}
+	if (r->meta_iface) {
+		avro_value_decref(&r->meta);
+		avro_value_iface_decref(r->meta_iface);
+	}
+	avro_freet(struct avro_file_reader_t_, r);
+}
+
 int avro_file_reader_fp(FILE *fp, const char *path, int should_close,
 			avro_file_reader_t * reader)
 {
@@ -752,16 +804,14 @@ int avro_file_reader_fp(FILE *fp, const char *path, int should_close,
 	r->block_reader = avro_reader_memory(0, 0);
 	if (!r->block_reader) {
 		avro_set_error("Cannot allocate block reader for file %s", path);
-		avro_reader_free(r->reader);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return ENOMEM;
 	}
 
 	r->codec = (avro_codec_t) avro_new(struct avro_codec_t_);
 	if (!r->codec) {
 		avro_set_error("Could not allocate codec for file %s", path);
-		avro_reader_free(r->reader);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return ENOMEM;
 	}
 	avro_codec(r->codec, NULL);
@@ -769,10 +819,7 @@ int avro_file_reader_fp(FILE *fp, const char *path, int should_close,
 	rval = file_read_header(r->reader, &r->writers_schema, r->codec,
 				r->sync, sizeof(r->sync), &r->meta_iface, &r->meta);
 	if (rval) {
-		avro_reader_free(r->reader);
-		avro_codec_reset(r->codec);
-		avro_freet(struct avro_codec_t_, r->codec);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return rval;
 	}
 
@@ -783,10 +830,7 @@ int avro_file_reader_fp(FILE *fp, const char *path, int should_close,
 	if (rval == EOF) {
 		r->blocks_total = 0;
 	} else if (rval) {
-		avro_reader_free(r->reader);
-		avro_codec_reset(r->codec);
-		avro_freet(struct avro_codec_t_, r->codec);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return rval;
 	}
 
@@ -806,29 +850,23 @@ int avro_reader_reader(avro_reader_t reader_in,	avro_file_reader_t * reader)
 	avro_file_reader_t r = (avro_file_reader_t) avro_new(struct avro_file_reader_t_);
 	if (!r) {
 		avro_set_error("Cannot allocate file reader for %s", path);
+		avro_reader_free(reader_in);
 		return ENOMEM;
 	}
 	memset(r, 0, sizeof(struct avro_file_reader_t_));
 
 	r->reader = reader_in;
-	if (!r->reader) {
-		avro_set_error("Cannot allocate reader for file %s", path);
-		avro_freet(struct avro_file_reader_t_, r);
-		return ENOMEM;
-	}
 	r->block_reader = avro_reader_memory(0, 0);
 	if (!r->block_reader) {
 		avro_set_error("Cannot allocate block reader for file %s", path);
-		avro_reader_free(r->reader);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return ENOMEM;
 	}
 
 	r->codec = (avro_codec_t) avro_new(struct avro_codec_t_);
 	if (!r->codec) {
 		avro_set_error("Could not allocate codec for file %s", path);
-		avro_reader_free(r->reader);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return ENOMEM;
 	}
 	avro_codec(r->codec, NULL);
@@ -836,10 +874,7 @@ int avro_reader_reader(avro_reader_t reader_in,	avro_file_reader_t * reader)
 	rval = file_read_header(r->reader, &r->writers_schema, r->codec,
 				r->sync, sizeof(r->sync), &r->meta_iface, &r->meta);
 	if (rval) {
-		avro_reader_free(r->reader);
-		avro_codec_reset(r->codec);
-		avro_freet(struct avro_codec_t_, r->codec);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return rval;
 	}
 
@@ -855,10 +890,7 @@ int avro_reader_reader(avro_reader_t reader_in,	avro_file_reader_t * reader)
 	if (rval == EOF) {
 		r->blocks_total = 0;
 	} else if (rval) {
-		avro_reader_free(r->reader);
-		avro_codec_reset(r->codec);
-		avro_freet(struct avro_codec_t_, r->codec);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return rval;
 	}
 
@@ -887,20 +919,17 @@ int avro_file_reader_memory(const char *buf, int64_t len,
 	r->memory_buffer_size = len;
 	r->reader = avro_reader_memory(buf, len);
 	if (!r->reader) {
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return ENOMEM;
 	}
 	r->block_reader = avro_reader_memory(0, 0);
 	if (!r->block_reader) {
-		avro_reader_free(r->reader);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return ENOMEM;
 	}
 	r->codec = (avro_codec_t) avro_new(struct avro_codec_t_);
 	if (!r->codec) {
-		avro_reader_free(r->reader);
-		avro_reader_free(r->block_reader);
-		avro_freet(struct avro_file_reader_t_, r);
+		file_reader_free(r);
 		return ENOMEM;
 	}
 	avro_codec(r->codec, NULL);
@@ -908,23 +937,18 @@ int avro_file_reader_memory(const char *buf, int64_t len,
 	rval = file_read_header(r->reader, &r->writers_schema, r->codec,
 			r->sync, sizeof(r->sync), &r->meta_iface, &r->meta);
 	if (rval) {
-		avro_reader_free(r->reader);
-		avro_reader_free(r->block_reader);
-		avro_codec_reset(r->codec);
-		avro_freet(struct avro_codec_t_, r->codec);
-		avro_freet(struct avro_file_reader_t_, r);
-		return rval;
+		goto error;
 	}
 
 	data_offset = avro_reader_tell(r->reader);
 	if (data_offset < 0 || data_offset > len) {
 		avro_set_error("Invalid Avro file header size");
 		rval = EILSEQ;
-		goto error_after_header;
+		goto error;
 	}
 	rval = file_index_memory_blocks(r, data_offset);
 	if (rval) {
-		goto error_after_header;
+		goto error;
 	}
 
 	if (avro_reader_memory_is_depleted(r->reader)) {
@@ -934,28 +958,15 @@ int avro_file_reader_memory(const char *buf, int64_t len,
 		if (rval == EOF) {
 			r->blocks_total = 0;
 		} else if (rval) {
-			goto error_after_header;
+			goto error;
 		}
 	}
 
 	*reader = r;
 	return 0;
 
-error_after_header:
-	avro_schema_decref(r->writers_schema);
-	avro_reader_free(r->reader);
-	avro_reader_free(r->block_reader);
-	avro_codec_reset(r->codec);
-	avro_freet(struct avro_codec_t_, r->codec);
-	if (r->current_blockdata) {
-		avro_free(r->current_blockdata, r->current_blocklen);
-	}
-	if (r->blocks) {
-		avro_free(r->blocks, r->block_capacity * sizeof(struct avro_file_block_descriptor_t));
-	}
-	avro_value_decref(&r->meta);
-	avro_value_iface_decref(r->meta_iface);
-	avro_freet(struct avro_file_reader_t_, r);
+error:
+	file_reader_free(r);
 	return rval;
 }
 
@@ -1295,8 +1306,7 @@ int avro_file_writer_flush(avro_file_writer_t w)
 
 int avro_file_writer_close(avro_file_writer_t w)
 {
-	int rval;
-	check(rval, avro_file_writer_flush(w));
+	int rval = avro_file_writer_flush(w);
 	avro_schema_decref(w->writers_schema);
 	avro_writer_free(w->datum_writer);
 	avro_writer_free(w->writer);
@@ -1304,7 +1314,7 @@ int avro_file_writer_close(avro_file_writer_t w)
 	avro_codec_reset(w->codec);
 	avro_freet(struct avro_codec_t_, w->codec);
 	avro_freet(struct avro_file_writer_t_, w);
-	return 0;
+	return rval;
 }
 
 int avro_file_reader_read(avro_file_reader_t r, avro_schema_t readers_schema,
@@ -1375,20 +1385,6 @@ avro_file_reader_read_value(avro_file_reader_t r, avro_value_t *value)
 
 int avro_file_reader_close(avro_file_reader_t reader)
 {
-	avro_schema_decref(reader->writers_schema);
-	avro_reader_free(reader->reader);
-	avro_reader_free(reader->block_reader);
-	avro_codec_reset(reader->codec);
-	avro_freet(struct avro_codec_t_, reader->codec);
-	if (reader->current_blockdata) {
-		avro_free(reader->current_blockdata, reader->current_blocklen);
-	}
-	if (reader->blocks) {
-		avro_free(reader->blocks,
-			reader->block_capacity * sizeof(struct avro_file_block_descriptor_t));
-	}
-	avro_value_decref(&reader->meta);
-	avro_value_iface_decref(reader->meta_iface);
-	avro_freet(struct avro_file_reader_t_, reader);
+	file_reader_free(reader);
 	return 0;
 }
