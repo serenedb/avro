@@ -1132,6 +1132,7 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			}
 			if (save_named_schemas(*schema, named_schemas)) {
 				avro_set_error("Cannot save record schema");
+				avro_schema_decref(*schema);
 				return ENOMEM;
 			}
 			for (i = 0; i < num_fields; i++) {
@@ -1177,6 +1178,7 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 				field_rval =
 					field_id_from_json_t(json_field_field_id, &field_id);
 				if (field_rval) {
+					avro_schema_decref(json_field_type_schema);
 					avro_schema_decref(*schema);
 					return field_rval;
 				}
@@ -1243,6 +1245,7 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			}
 			if (save_named_schemas(*schema, named_schemas)) {
 				avro_set_error("Cannot save enum schema");
+				avro_schema_decref(*schema);
 				return ENOMEM;
 			}
 			for (i = 0; i < num_symbols; i++) {
@@ -1292,6 +1295,7 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			items_rval =
 			    field_id_from_json_t(json_element_id, &element_id);
 			if (items_rval) {
+				avro_schema_decref(items_schema);
 				return items_rval;
 			}
 			*schema = avro_schema_array(items_schema, element_id, logical_type);
@@ -1321,10 +1325,12 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			}
 			values_rval = field_id_from_json_t(json_key_id, &key_id);
 			if (values_rval) {
+				avro_schema_decref(values_schema);
 				return values_rval;
 			}
 			values_rval = field_id_from_json_t(json_value_id, &value_id);
 			if (values_rval) {
+				avro_schema_decref(values_schema);
 				return values_rval;
 			}
 			*schema = avro_schema_map(values_schema, key_id, value_id);
@@ -1346,6 +1352,7 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 				json_t *schema_json = json_array_get(json, i);
 				if (!schema_json) {
 					avro_set_error("Cannot retrieve branch JSON");
+					avro_schema_decref(*schema);
 					return EINVAL;
 				}
 				schema_rval =
@@ -1410,6 +1417,7 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 			}
 			if (save_named_schemas(*schema, named_schemas)) {
 				avro_set_error("Cannot save fixed schema");
+				avro_schema_decref(*schema);
 				return ENOMEM;
 			}
 		}
@@ -1446,6 +1454,9 @@ avro_schema_from_json_root(json_t *root, avro_schema_t *schema)
 
 	/* json_dumpf(root, stderr, 0); */
 	rval = avro_schema_from_json_t(root, schema, named_schemas, NULL);
+	if (rval) {
+		*schema = NULL;
+	}
 	json_decref(root);
 	st_foreach(named_schemas, (hash_function_foreach) named_schema_free_foreach, 0);
 	st_free_table(named_schemas);
