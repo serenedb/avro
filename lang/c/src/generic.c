@@ -57,21 +57,21 @@ avro_generic_value_new(avro_value_iface_t *iface, avro_value_t *dest)
 	avro_generic_value_iface_t  *giface =
 	    container_of(iface, avro_generic_value_iface_t, parent);
 	size_t  instance_size = avro_value_instance_size(giface);
-	void  *self = avro_malloc(instance_size + AVRO_REFCOUNT_HEADER);
-	if (self == NULL) {
+	void  *block = avro_malloc(instance_size + AVRO_REFCOUNT_HEADER);
+	if (block == NULL) {
 		avro_set_error(strerror(ENOMEM));
 		dest->iface = NULL;
 		dest->self = NULL;
 		return ENOMEM;
 	}
 
-	volatile int  *refcount = (volatile int *) self;
-	self = (char *) self + AVRO_REFCOUNT_HEADER;
+	volatile int  *refcount = (volatile int *) block;
+	void  *self = (char *) block + AVRO_REFCOUNT_HEADER;
 
 	*refcount = 1;
 	rval = avro_value_init(giface, self);
 	if (rval != 0) {
-		avro_free(self, instance_size);
+		avro_free(block, instance_size + AVRO_REFCOUNT_HEADER);
 		dest->iface = NULL;
 		dest->self = NULL;
 		return rval;

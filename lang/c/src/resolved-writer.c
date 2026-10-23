@@ -143,20 +143,20 @@ avro_resolved_writer_new_value(avro_value_iface_t *viface,
 	int  rval;
 	avro_resolved_writer_t  *iface =
 	    container_of(viface, avro_resolved_writer_t, parent);
-	void  *self = avro_malloc(iface->instance_size + AVRO_REFCOUNT_HEADER);
-	if (self == NULL) {
+	void  *block = avro_malloc(iface->instance_size + AVRO_REFCOUNT_HEADER);
+	if (block == NULL) {
 		value->iface = NULL;
 		value->self = NULL;
 		return ENOMEM;
 	}
 
-	memset(self, 0, iface->instance_size + AVRO_REFCOUNT_HEADER);
-	volatile int  *refcount = (volatile int *) self;
-	self = (char *) self + AVRO_REFCOUNT_HEADER;
+	memset(block, 0, iface->instance_size + AVRO_REFCOUNT_HEADER);
+	volatile int  *refcount = (volatile int *) block;
+	void  *self = (char *) block + AVRO_REFCOUNT_HEADER;
 
 	rval = avro_resolved_writer_init(iface, self);
 	if (rval != 0) {
-		avro_free(self, iface->instance_size + AVRO_REFCOUNT_HEADER);
+		avro_free(block, iface->instance_size + AVRO_REFCOUNT_HEADER);
 		value->iface = NULL;
 		value->self = NULL;
 		return rval;
