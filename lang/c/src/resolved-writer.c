@@ -143,20 +143,20 @@ avro_resolved_writer_new_value(avro_value_iface_t *viface,
 	int  rval;
 	avro_resolved_writer_t  *iface =
 	    container_of(viface, avro_resolved_writer_t, parent);
-	void  *self = avro_malloc(iface->instance_size + sizeof(volatile int));
+	void  *self = avro_malloc(iface->instance_size + AVRO_REFCOUNT_HEADER);
 	if (self == NULL) {
 		value->iface = NULL;
 		value->self = NULL;
 		return ENOMEM;
 	}
 
-	memset(self, 0, iface->instance_size + sizeof(volatile int));
+	memset(self, 0, iface->instance_size + AVRO_REFCOUNT_HEADER);
 	volatile int  *refcount = (volatile int *) self;
-	self = (char *) self + sizeof(volatile int);
+	self = (char *) self + AVRO_REFCOUNT_HEADER;
 
 	rval = avro_resolved_writer_init(iface, self);
 	if (rval != 0) {
-		avro_free(self, iface->instance_size + sizeof(volatile int));
+		avro_free(self, iface->instance_size + AVRO_REFCOUNT_HEADER);
 		value->iface = NULL;
 		value->self = NULL;
 		return rval;
@@ -180,8 +180,8 @@ avro_resolved_writer_free_value(const avro_value_iface_t *viface, void *vself)
 		avro_value_decref(self);
 	}
 
-	vself = (char *) vself - sizeof(volatile int);
-	avro_free(vself, iface->instance_size + sizeof(volatile int));
+	vself = (char *) vself - AVRO_REFCOUNT_HEADER;
+	avro_free(vself, iface->instance_size + AVRO_REFCOUNT_HEADER);
 }
 
 static void
@@ -191,7 +191,7 @@ avro_resolved_writer_incref(avro_value_t *value)
 	 * This only works if you pass in the top-level value.
 	 */
 
-	volatile int  *refcount = (volatile int *) ((char *) value->self - sizeof(volatile int));
+	volatile int  *refcount = (volatile int *) ((char *) value->self - AVRO_REFCOUNT_HEADER);
 	avro_refcount_inc(refcount);
 }
 
@@ -202,7 +202,7 @@ avro_resolved_writer_decref(avro_value_t *value)
 	 * This only works if you pass in the top-level value.
 	 */
 
-	volatile int  *refcount = (volatile int *) ((char *) value->self - sizeof(volatile int));
+	volatile int  *refcount = (volatile int *) ((char *) value->self - AVRO_REFCOUNT_HEADER);
 	if (avro_refcount_dec(refcount)) {
 		avro_resolved_writer_free_value(value->iface, value->self);
 	}
@@ -2099,6 +2099,7 @@ avro_resolved_record_writer_calculate_size(avro_resolved_writer_t *iface)
 	size_t  wi;
 	size_t  next_offset = sizeof(avro_resolved_record_value_t);
 	for (wi = 0; wi < riface->field_count; wi++) {
+		next_offset = AVRO_ALIGN_UP(next_offset);
 		riface->field_offsets[wi] = next_offset;
 		if (riface->field_resolvers[wi] != NULL) {
 			avro_resolved_writer_calculate_size
@@ -2113,7 +2114,7 @@ avro_resolved_record_writer_calculate_size(avro_resolved_writer_t *iface)
 	}
 
 	DEBUG("Record has size %" PRIsz, next_offset);
-	iface->instance_size = next_offset;
+	iface->instance_size = AVRO_ALIGN_UP(next_offset);
 }
 
 static void
@@ -2483,7 +2484,7 @@ typedef struct avro_resolved_union_value {
 
 /** Return a pointer to the active branch within a union struct. */
 #define avro_resolved_union_branch(_union) \
-	(((char *) (_union)) + sizeof(avro_resolved_union_value_t))
+	(((char *) (_union)) + AVRO_ALIGN_UP(sizeof(avro_resolved_union_value_t)))
 
 
 static void
@@ -2518,7 +2519,7 @@ avro_resolved_union_writer_calculate_size(avro_resolved_writer_t *iface)
 
 	DEBUG("Maximum branch size is %" PRIsz, max_branch_size);
 	iface->instance_size =
-	    sizeof(avro_resolved_union_value_t) + max_branch_size;
+	    AVRO_ALIGN_UP(AVRO_ALIGN_UP(sizeof(avro_resolved_union_value_t)) + max_branch_size);
 	DEBUG("Total union size is %" PRIsz, iface->instance_size);
 }
 

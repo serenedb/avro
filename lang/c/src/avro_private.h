@@ -93,6 +93,11 @@ extern "C" {
 #define container_of(ptr_, type_, member_)  \
     ((type_ *)((char *)ptr_ - offsetof(type_, member_)))
 
+#define AVRO_ALIGN_UP(size_) \
+    (((size_) + _Alignof(max_align_t) - 1) / _Alignof(max_align_t) * _Alignof(max_align_t))
+
+#define AVRO_REFCOUNT_HEADER  AVRO_ALIGN_UP(sizeof(volatile int))
+
 #define nullstrcmp(s1, s2) \
     (((s1) && (s2)) ? strcmp(s1, s2) : ((s1) || (s2)))
 
