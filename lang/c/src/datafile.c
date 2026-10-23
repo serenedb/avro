@@ -87,7 +87,7 @@ static void generate_sync(avro_file_writer_t w)
 	unsigned int i;
 	srand(time(NULL));
 	for (i = 0; i < sizeof(w->sync); i++) {
-		w->sync[i] = ((double)rand() / (RAND_MAX + 1.0)) * 255;
+		w->sync[i] = (char) (unsigned char) (((double)rand() / (RAND_MAX + 1.0)) * 255);
 	}
 }
 
