@@ -36,20 +36,18 @@ struct st_table_entry {
 	 * allocated initially
 	 *
 	 */
-static int numcmp(long, long);
-static int numhash(long);
+static int numcmp(void *, void *);
+static int numhash(void *);
 static struct st_hash_type type_numhash = {
-	(hash_function_compare) numcmp,
-	(hash_function_hash) numhash
+	numcmp,
+	numhash
 };
 
-/*
- * extern int strcmp(const char *, const char *); 
- */
-static int strhash(const char *);
+static int strcompare(void *, void *);
+static int strhash(void *);
 static struct st_hash_type type_strhash = {
-	(hash_function_compare) strcmp,
-	(hash_function_hash) strhash
+	strcompare,
+	strhash
 };
 
 static void rehash(st_table *);
@@ -426,7 +424,7 @@ int st_delete_safe(register st_table *table,register st_data_t *key,st_data_t *v
 	return 0;
 }
 
-static int delete_never(st_data_t key, st_data_t value, st_data_t never)
+static int delete_never(void *key, void *value, void *never)
 {
 	AVRO_UNUSED(key);
 
@@ -439,7 +437,7 @@ void st_cleanup_safe(st_table *table,st_data_t never)
 {
 	int num_entries = table->num_entries;
 
-	st_foreach(table, (hash_function_foreach) delete_never, never);
+	st_foreach(table, delete_never, never);
 	table->num_entries = num_entries;
 }
 
@@ -497,8 +495,14 @@ int st_foreach(st_table *table,int (*func) (void*, void*, void*),st_data_t arg)
 	return 0;
 }
 
-static int strhash(register const char *string)
+static int strcompare(void *a, void *b)
 {
+	return strcmp((const char *) a, (const char *) b);
+}
+
+static int strhash(void *key)
+{
+	register const char *string = (const char *) key;
 	register int c;
 
 #ifdef HASH_ELFHASH
@@ -512,7 +516,7 @@ static int strhash(register const char *string)
 	}
 	return h;
 #elif defined(HASH_PERL)
-	register int val = 0;
+	register unsigned int val = 0;
 
 	while ((c = *string++) != '\0') {
 		val += c;
@@ -524,7 +528,7 @@ static int strhash(register const char *string)
 
 	return val + (val << 15);
 #else
-	register int val = 0;
+	register unsigned int val = 0;
 
 	while ((c = *string++) != '\0') {
 		val = val * 997 + c;
@@ -534,12 +538,12 @@ static int strhash(register const char *string)
 #endif
 }
 
-static int numcmp(long x, long y)
+static int numcmp(void *x, void *y)
 {
 	return x != y;
 }
 
-static int numhash(long n)
+static int numhash(void *n)
 {
-	return n;
+	return (int) (uintptr_t) n;
 }

@@ -30,10 +30,11 @@ struct validate_st {
 };
 
 static int
-schema_map_validate_foreach(char *key, avro_datum_t datum,
-			    struct validate_st *vst)
+schema_map_validate_foreach(void *key, void *vdatum, void *varg)
 {
 	AVRO_UNUSED(key);
+	avro_datum_t datum = (avro_datum_t) vdatum;
+	struct validate_st *vst = (struct validate_st *) varg;
 
 	if (!avro_schema_datum_validate(vst->expected_schema, datum)) {
 		vst->rval = 0;
@@ -123,7 +124,7 @@ avro_schema_datum_validate(avro_schema_t expected_schema, avro_datum_t datum)
 			    { avro_schema_to_map(expected_schema)->values, 1
 			};
 			st_foreach(avro_datum_to_map(datum)->map,
-				   (hash_function_foreach) schema_map_validate_foreach,
+				   schema_map_validate_foreach,
 				   (st_data_t) & vst);
 			return vst.rval;
 		}

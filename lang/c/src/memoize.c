@@ -32,8 +32,11 @@ typedef struct avro_memoize_key {
 
 
 static int
-avro_memoize_key_cmp(avro_memoize_key_t *a, avro_memoize_key_t *b)
+avro_memoize_key_cmp(void *va, void *vb)
 {
+	const avro_memoize_key_t  *a = (const avro_memoize_key_t *) va;
+	const avro_memoize_key_t  *b = (const avro_memoize_key_t *) vb;
+
 	/*
 	 * This isn't a proper cmp operation, since it always returns 1
 	 * if the keys are different.  But that's okay for the hash
@@ -45,15 +48,16 @@ avro_memoize_key_cmp(avro_memoize_key_t *a, avro_memoize_key_t *b)
 
 
 static int
-avro_memoize_key_hash(avro_memoize_key_t *a)
+avro_memoize_key_hash(void *va)
 {
-	return ((uintptr_t) a->key1) ^ ((uintptr_t) a->key2);
+	const avro_memoize_key_t  *a = (const avro_memoize_key_t *) va;
+	return (int) (((uintptr_t) a->key1) ^ ((uintptr_t) a->key2));
 }
 
 
 static struct st_hash_type  avro_memoize_hash_type = {
-	(hash_function_compare) avro_memoize_key_cmp,
-	(hash_function_hash) avro_memoize_key_hash
+	avro_memoize_key_cmp,
+	avro_memoize_key_hash
 };
 
 
@@ -66,7 +70,7 @@ avro_memoize_init(avro_memoize_t *mem)
 
 
 static int
-avro_memoize_free_key(avro_memoize_key_t *key, void *result, void *dummy)
+avro_memoize_free_key(void *key, void *result, void *dummy)
 {
 	AVRO_UNUSED(result);
 	AVRO_UNUSED(dummy);
@@ -78,7 +82,7 @@ avro_memoize_free_key(avro_memoize_key_t *key, void *result, void *dummy)
 void
 avro_memoize_done(avro_memoize_t *mem)
 {
-	st_foreach((st_table *) mem->cache, (hash_function_foreach) avro_memoize_free_key, 0);
+	st_foreach((st_table *) mem->cache, avro_memoize_free_key, 0);
 	st_free_table((st_table *) mem->cache);
 	memset(mem, 0, sizeof(avro_memoize_t));
 }

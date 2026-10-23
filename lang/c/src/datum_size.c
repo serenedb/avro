@@ -92,8 +92,11 @@ struct size_map_args {
 };
 
 static int
-size_map_foreach(char *key, avro_datum_t datum, struct size_map_args *args)
+size_map_foreach(void *vkey, void *vdatum, void *varg)
 {
+	char *key = (char *) vkey;
+	avro_datum_t datum = (avro_datum_t) vdatum;
+	struct size_map_args *args = (struct size_map_args *) varg;
 	int rval = args->enc->size_string(args->writer, key);
 	if (rval < 0) {
 		args->rval = rval;
@@ -126,7 +129,7 @@ size_map(avro_writer_t writer, const avro_encoding_t * enc,
 	if (datum->map->num_entries) {
 		size_accum(rval, size,
 			   enc->size_long(writer, datum->map->num_entries));
-		st_foreach(datum->map, (hash_function_foreach) size_map_foreach, (st_data_t) & args);
+		st_foreach(datum->map, size_map_foreach, (st_data_t) & args);
 		size += args.size;
 	}
 	if (!args.rval) {

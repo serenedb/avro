@@ -958,21 +958,21 @@ avro_array_append_datum(avro_datum_t array_datum,
 	return 0;
 }
 
-static int char_datum_free_foreach(char *key, avro_datum_t datum, void *arg)
+static int char_datum_free_foreach(void *key, void *datum, void *arg)
 {
 	AVRO_UNUSED(arg);
 
-	avro_datum_decref(datum);
-	avro_str_free(key);
+	avro_datum_decref((avro_datum_t) datum);
+	avro_str_free((char *) key);
 	return ST_DELETE;
 }
 
-static int array_free_foreach(int i, avro_datum_t datum, void *arg)
+static int array_free_foreach(void *i, void *datum, void *arg)
 {
 	AVRO_UNUSED(i);
 	AVRO_UNUSED(arg);
 
-	avro_datum_decref(datum);
+	avro_datum_decref((avro_datum_t) datum);
 	return ST_DELETE;
 }
 
@@ -1111,7 +1111,7 @@ static void avro_datum_free(avro_datum_t datum)
 				record = avro_datum_to_record(datum);
 				avro_schema_decref(record->schema);
 				st_foreach(record->fields_byname,
-					   (hash_function_foreach) char_datum_free_foreach, 0);
+					   char_datum_free_foreach, 0);
 				st_free_table(record->field_order);
 				st_free_table(record->fields_byname);
 				avro_freet(struct avro_record_datum_t, record);
@@ -1139,7 +1139,7 @@ static void avro_datum_free(avro_datum_t datum)
 				struct avro_map_datum_t *map;
 				map = avro_datum_to_map(datum);
 				avro_schema_decref(map->schema);
-				st_foreach(map->map, (hash_function_foreach) char_datum_free_foreach,
+				st_foreach(map->map, char_datum_free_foreach,
 					   0);
 				st_free_table(map->map);
 				st_free_table(map->indices_by_key);
@@ -1151,7 +1151,7 @@ static void avro_datum_free(avro_datum_t datum)
 				struct avro_array_datum_t *array;
 				array = avro_datum_to_array(datum);
 				avro_schema_decref(array->schema);
-				st_foreach(array->els, (hash_function_foreach) array_free_foreach, 0);
+				st_foreach(array->els, array_free_foreach, 0);
 				st_free_table(array->els);
 				avro_freet(struct avro_array_datum_t, array);
 			}
@@ -1173,13 +1173,13 @@ static void avro_datum_free(avro_datum_t datum)
 }
 
 static int
-datum_reset_foreach(int i, avro_datum_t datum, void *arg)
+datum_reset_foreach(void *i, void *datum, void *arg)
 {
 	AVRO_UNUSED(i);
 	int  rval;
 	int  *result = (int *) arg;
 
-	rval = avro_datum_reset(datum);
+	rval = avro_datum_reset((avro_datum_t) datum);
 	if (rval == 0) {
 		return ST_CONTINUE;
 	} else {
@@ -1199,7 +1199,7 @@ avro_datum_reset(avro_datum_t datum)
 		{
 			struct avro_array_datum_t *array;
 			array = avro_datum_to_array(datum);
-			st_foreach(array->els, (hash_function_foreach) array_free_foreach, 0);
+			st_foreach(array->els, array_free_foreach, 0);
 			st_free_table(array->els);
 
 			rval = avro_init_array(array);
@@ -1214,7 +1214,7 @@ avro_datum_reset(avro_datum_t datum)
 		{
 			struct avro_map_datum_t *map;
 			map = avro_datum_to_map(datum);
-			st_foreach(map->map, (hash_function_foreach) char_datum_free_foreach, 0);
+			st_foreach(map->map, char_datum_free_foreach, 0);
 			st_free_table(map->map);
 			st_free_table(map->indices_by_key);
 			st_free_table(map->keys_by_index);
@@ -1233,7 +1233,7 @@ avro_datum_reset(avro_datum_t datum)
 			record = avro_datum_to_record(datum);
 			rval = 0;
 			st_foreach(record->fields_byname,
-				   (hash_function_foreach) datum_reset_foreach, (st_data_t) &rval);
+				   datum_reset_foreach, (st_data_t) &rval);
 			return rval;
 		}
 

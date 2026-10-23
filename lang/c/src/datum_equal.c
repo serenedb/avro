@@ -51,8 +51,10 @@ struct st_equal_args {
 };
 
 static int
-st_equal_foreach(char *key, avro_datum_t datum, struct st_equal_args *args)
+st_equal_foreach(void *key, void *vdatum, void *varg)
 {
+	avro_datum_t datum = (avro_datum_t) vdatum;
+	struct st_equal_args *args = (struct st_equal_args *) varg;
 	union {
 		avro_datum_t datum_other;
 		st_data_t data;
@@ -78,7 +80,7 @@ static int map_equal(struct avro_map_datum_t *a, struct avro_map_datum_t *b)
 	if (a->map->num_entries != b->map->num_entries) {
 		return 0;
 	}
-	st_foreach(a->map, (hash_function_foreach) st_equal_foreach, (st_data_t) & args);
+	st_foreach(a->map, st_equal_foreach, (st_data_t) & args);
 	return args.rval;
 }
 
@@ -93,7 +95,7 @@ static int record_equal(struct avro_record_datum_t *a,
 	if (a->fields_byname->num_entries != b->fields_byname->num_entries) {
 		return 0;
 	}
-	st_foreach(a->fields_byname, (hash_function_foreach) st_equal_foreach, (st_data_t) & args);
+	st_foreach(a->fields_byname, st_equal_foreach, (st_data_t) & args);
 	return args.rval;
 }
 

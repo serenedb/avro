@@ -84,11 +84,11 @@ static char *split_namespace_name(const char *fullname, const char **name_out)
 	}
 }
 
-static int record_free_foreach(int i, struct avro_record_field_t *field,
-			       void *arg)
+static int record_free_foreach(void *i, void *vfield, void *arg)
 {
 	AVRO_UNUSED(i);
 	AVRO_UNUSED(arg);
+	struct avro_record_field_t *field = (struct avro_record_field_t *) vfield;
 
 	avro_str_free(field->name);
 	avro_schema_decref(field->type);
@@ -96,21 +96,21 @@ static int record_free_foreach(int i, struct avro_record_field_t *field,
 	return ST_DELETE;
 }
 
-static int enum_free_foreach(int i, char *sym, void *arg)
+static int enum_free_foreach(void *i, void *sym, void *arg)
 {
 	AVRO_UNUSED(i);
 	AVRO_UNUSED(arg);
 
-	avro_str_free(sym);
+	avro_str_free((char *) sym);
 	return ST_DELETE;
 }
 
-static int union_free_foreach(int i, avro_schema_t schema, void *arg)
+static int union_free_foreach(void *i, void *schema, void *arg)
 {
 	AVRO_UNUSED(i);
 	AVRO_UNUSED(arg);
 
-	avro_schema_decref(schema);
+	avro_schema_decref((avro_schema_t) schema);
 	return ST_DELETE;
 }
 
@@ -153,7 +153,7 @@ static void avro_schema_free(avro_schema_t schema)
 				if (record->space) {
 					avro_str_free(record->space);
 				}
-				st_foreach(record->fields, (hash_function_foreach) record_free_foreach,
+				st_foreach(record->fields, record_free_foreach,
 					   0);
 				st_free_table(record->fields_byname);
 				st_free_table(record->fields);
@@ -168,7 +168,7 @@ static void avro_schema_free(avro_schema_t schema)
 				if (enump->space) {
 					avro_str_free(enump->space);
 				}
-				st_foreach(enump->symbols, (hash_function_foreach) enum_free_foreach,
+				st_foreach(enump->symbols, enum_free_foreach,
 					   0);
 				st_free_table(enump->symbols);
 				st_free_table(enump->symbols_byname);
@@ -211,7 +211,7 @@ static void avro_schema_free(avro_schema_t schema)
 		case AVRO_UNION:{
 				struct avro_union_schema_t *unionp;
 				unionp = avro_schema_to_union(schema);
-				st_foreach(unionp->branches, (hash_function_foreach) union_free_foreach,
+				st_foreach(unionp->branches, union_free_foreach,
 					   0);
 				st_free_table(unionp->branches);
 				st_free_table(unionp->branches_byname);
@@ -1430,12 +1430,12 @@ avro_schema_from_json_t(json_t *json, avro_schema_t *schema,
 	return 0;
 }
 
-static int named_schema_free_foreach(char *full_name, st_data_t value, st_data_t arg)
+static int named_schema_free_foreach(void *full_name, void *value, void *arg)
 {
 	AVRO_UNUSED(value);
 	AVRO_UNUSED(arg);
 
-	avro_str_free(full_name);
+	avro_str_free((char *) full_name);
 	return ST_DELETE;
 }
 
@@ -1458,7 +1458,7 @@ avro_schema_from_json_root(json_t *root, avro_schema_t *schema)
 		*schema = NULL;
 	}
 	json_decref(root);
-	st_foreach(named_schemas, (hash_function_foreach) named_schema_free_foreach, 0);
+	st_foreach(named_schemas, named_schema_free_foreach, 0);
 	st_free_table(named_schemas);
 	return rval;
 }
@@ -1692,7 +1692,7 @@ avro_schema_t avro_schema_copy(avro_schema_t schema)
 	}
 
 	new_schema = avro_schema_copy_root(schema, named_schemas);
-	st_foreach(named_schemas, (hash_function_foreach) named_schema_free_foreach, 0);
+	st_foreach(named_schemas, named_schema_free_foreach, 0);
 	st_free_table(named_schemas);
 	return new_schema;
 }
