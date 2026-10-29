@@ -74,7 +74,6 @@ struct avro_file_writer_t_ {
 	avro_writer_t datum_writer;
 	char* datum_buffer;
 	size_t datum_buffer_size;
-	char schema_buf[64 * 1024];
 };
 
 #define DEFAULT_BLOCK_SIZE 16 * 1024
@@ -96,14 +95,37 @@ static int write_sync(avro_file_writer_t w)
 	return avro_write(w->writer, w->sync, sizeof(w->sync));
 }
 
+static int write_schema(avro_file_writer_t w, const avro_encoding_t *enc)
+{
+	int rval;
+	size_t size = 64 * 1024;
+	for (;;) {
+		char *buf = (char *) avro_malloc(size);
+		if (!buf) {
+			avro_set_error("Cannot allocate a buffer for the writer schema");
+			return ENOMEM;
+		}
+		avro_writer_t schema_writer = avro_writer_memory(buf, size);
+		rval = avro_schema_to_json(w->writers_schema, schema_writer);
+		int64_t schema_len = avro_writer_tell(schema_writer);
+		avro_writer_free(schema_writer);
+		if (rval != ENOSPC) {
+			if (!rval) {
+				rval = enc->write_bytes(w->writer, buf, schema_len);
+			}
+			avro_free(buf, size);
+			return rval;
+		}
+		avro_free(buf, size);
+		size *= 2;
+	}
+}
+
 static int write_header(avro_file_writer_t w, const char *metadata_json)
 {
 	int rval;
 	uint8_t version = 1;
-	/* TODO: remove this static buffer */
-	avro_writer_t schema_writer;
 	const avro_encoding_t *enc = &avro_binary_encoding;
-	int64_t schema_len;
 
 	/* Generate random sync */
 	generate_sync(w);
@@ -128,24 +150,11 @@ static int write_header(avro_file_writer_t w, const char *metadata_json)
 		meta_count = json_object_size(metadata_obj);
 	}
 
-	check(rval, enc->write_long(w->writer, meta_count + 2)); // +2 for codec & schema
-
-	check(rval, enc->write_string(w->writer, "avro.codec"));
-	check(rval, enc->write_bytes(w->writer, w->codec->name, strlen(w->codec->name)));
-	check(rval, enc->write_string(w->writer, "avro.schema"));
-	schema_writer =
-	    avro_writer_memory(&w->schema_buf[0], sizeof(w->schema_buf));
-	rval = avro_schema_to_json(w->writers_schema, schema_writer);
-	if (rval) {
-		avro_writer_free(schema_writer);
-		return rval;
-	}
-	schema_len = avro_writer_tell(schema_writer);
-	avro_writer_free(schema_writer);
-	rval = enc->write_bytes(w->writer, w->schema_buf, schema_len);
-	if (rval) {
-		json_decref(metadata_obj);
-		return rval;
+	if ((rval = enc->write_long(w->writer, meta_count + 2)) || // +2 for codec & schema
+	    (rval = enc->write_string(w->writer, "avro.codec")) ||
+	    (rval = enc->write_bytes(w->writer, w->codec->name, strlen(w->codec->name))) ||
+	    (rval = enc->write_string(w->writer, "avro.schema")) || (rval = write_schema(w, enc))) {
+		goto out;
 	}
 
 	if (metadata_obj) {
@@ -155,24 +164,26 @@ static int write_header(avro_file_writer_t w, const char *metadata_json)
 		json_object_foreach(metadata_obj, key, value) {
 			rval = enc->write_string(w->writer, key);
 			if (rval) {
-				json_decref(metadata_obj);
-				return rval;
+				goto out;
 			}
 			if (!json_is_string(value)) {
-				json_decref(metadata_obj);
-				return EINVAL;
+				rval = EINVAL;
+				goto out;
 			}
 
 			const char *val_str = json_string_value(value);
 			rval = enc->write_bytes(w->writer, val_str, strlen(val_str));
 			if (rval) {
-				json_decref(metadata_obj);
-				return rval;
+				goto out;
 			}
 		}
-		json_decref(metadata_obj);
 	}
 
+out:
+	json_decref(metadata_obj);
+	if (rval) {
+		return rval;
+	}
 	check(rval, enc->write_long(w->writer, 0));
 	return write_sync(w);
 }
