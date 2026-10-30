@@ -240,6 +240,7 @@ codec_deflate(avro_codec_t codec)
 	}
 
 	if (inflateInit2(is, -15) != Z_OK) {
+		deflateEnd(ds);
 		avro_freet(struct codec_data_deflate, codec->codec_data);
 		codec->codec_data = NULL;
 		avro_set_error("Cannot initialize zlib inflate");
@@ -549,6 +550,7 @@ int avro_codec(avro_codec_t codec, const char *type)
 		return codec_null(codec);
 	}
 
+	codec_null(codec);
 	avro_set_error("Unknown codec %s", type);
 	return 1;
 }
