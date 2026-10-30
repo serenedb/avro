@@ -25,7 +25,8 @@
 
 
 #define raw_entry_size(element_size) \
-	(sizeof(avro_raw_map_entry_t) + element_size)
+	((sizeof(avro_raw_map_entry_t) + (element_size) + _Alignof(avro_raw_map_entry_t) - 1) & \
+	 ~(_Alignof(avro_raw_map_entry_t) - 1))
 
 void avro_raw_map_init(avro_raw_map_t *map, size_t element_size)
 {
